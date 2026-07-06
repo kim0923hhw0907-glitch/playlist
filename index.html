@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>플레이리스트</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div id="bg-layer" class="bg-layer"></div>
+
+    <!-- Login Overlay -->
+    <div id="login-overlay" class="login-overlay">
+        <div class="login-card">
+            <h1 class="login-title">플레이리스트</h1>
+            <p class="login-subtitle">로그인하여 나만의 플레이리스트를 관리하세요</p>
+            <div id="login-error" class="login-error"></div>
+            <input type="text" id="login-username" placeholder="사용자 이름" autocomplete="username">
+            <input type="password" id="login-password" placeholder="비밀번호" autocomplete="current-password">
+            <button id="login-btn" class="btn-primary" style="width:100%">로그인</button>
+            <button id="register-btn" class="btn-small" style="width:100%;margin-top:6px">회원가입</button>
+        </div>
+    </div>
+
+    <div class="app">
+        <header>
+            <div class="header-row">
+                <h1>내 플레이리스트</h1>
+                <div id="user-info" class="user-info" style="display:none">
+                    <span id="user-display" class="user-name"></span>
+                    <button id="logout-btn" class="btn-small">로그아웃</button>
+                </div>
+            </div>
+            <nav>
+                <button class="tab-btn active" data-tab="library">라이브러리</button>
+                <button class="tab-btn" data-tab="playlists">플레이리스트</button>
+                <button class="tab-btn" data-tab="player">플레이어</button>
+                <button class="tab-btn" data-tab="community">커뮤니티</button>
+                <button class="tab-btn" data-tab="ui">UI 설정</button>
+            </nav>
+        </header>
+
+        <main>
+            <section id="library" class="tab-content active">
+                <div class="section-header">
+                    <h2>노래 라이브러리</h2>
+                </div>
+                <div id="filter-bar" class="filter-bar"></div>
+                <form id="add-song-form" class="add-form">
+                    <input type="text" id="song-title" placeholder="노래 제목" required>
+                    <input type="text" id="song-artist" placeholder="아티스트" required>
+                    <input type="url" id="song-url" placeholder="오디오 파일 URL (.mp3 등)">
+                    <button type="submit" class="btn-primary">추가</button>
+                </form>
+                <p class="drop-hint">오디오/비디오 파일을 끌어다 놓아도 추가할 수 있습니다</p>
+                <div id="song-list" class="item-list"></div>
+                <div id="drop-overlay" class="drop-overlay">
+                    <div class="drop-content">
+                        <span class="drop-icon">↑</span>
+                        <p>파일을 여기에 놓으세요</p>
+                        <p class="drop-sub">오디오 파일(MP3, WAV, OGG, FLAC 등)</p>
+                    </div>
+                </div>
+            </section>
+
+            <section id="playlists" class="tab-content">
+                <div class="section-header">
+                    <h2>내 플레이리스트</h2>
+                </div>
+                <form id="add-playlist-form" class="add-form" style="flex-wrap:wrap">
+                    <input type="text" id="playlist-name" placeholder="플레이리스트 이름" required>
+                    <button type="submit" class="btn-primary">생성</button>
+                    <div class="add-form" style="gap:6px;flex-wrap:wrap;width:100%;margin-top:4px">
+                        <input type="url" id="create-pl-logo-url" placeholder="로고 이미지 URL (선택)" style="flex:1;min-width:120px">
+                        <button type="button" class="btn-small" onclick="setCreatePlLogo()">URL 적용</button>
+                        <input type="file" id="create-pl-logo-file" accept="image/*" style="display:none">
+                        <button type="button" class="btn-small" onclick="document.getElementById('create-pl-logo-file').click()">파일 선택</button>
+                        <button type="button" class="btn-small" onclick="clearCreatePlLogo()" style="color:var(--danger)">제거</button>
+                    </div>
+                    <div id="create-pl-logo-preview" class="song-logo-preview" style="min-height:40px;margin:2px 0 0"></div>
+                </form>
+                <div id="playlist-list" class="item-list"></div>
+            </section>
+
+            <section id="player" class="tab-content">
+                <div id="player-view">
+                    <div id="now-playing">
+                        <div id="now-playing-logos" style="display:flex;align-items:center;gap:12px;margin-bottom:8px">
+                            <img id="now-playing-logo" class="now-playing-logo" style="display:none">
+                            <img id="now-playing-pl-logo" class="now-playing-logo" style="display:none;width:48px;height:48px;border-radius:10px">
+                        </div>
+                        <h3 id="current-title">선택된 노래 없음</h3>
+                        <p id="current-artist"></p>
+                        <p id="current-playlist-name" class="playlist-label"></p>
+                        <p id="next-up" class="next-up"></p>
+                    </div>
+                    <div id="lyrics-container" class="lyrics-container" style="display:none">
+                        <div id="lyrics-text" class="lyrics-text"></div>
+                    </div>
+                    <canvas id="visualizer" class="visualizer"></canvas>
+                    <div id="progress-area">
+                        <span id="current-time">0:00</span>
+                        <input type="range" id="progress-bar" value="0" min="0" max="100" step="0.1">
+                        <span id="total-time">0:00</span>
+                    </div>
+                    <div id="controls">
+                        <button id="prev-btn" class="ctrl-btn" title="이전 곡">⏮</button>
+                        <button id="play-btn" class="ctrl-btn main" title="재생/일시정지">▶</button>
+                        <button id="next-btn" class="ctrl-btn" title="다음 곡">⏭</button>
+                    </div>
+                    <div id="volume-area">
+                        <span class="vol-icon">🔊</span>
+                        <input type="range" id="volume-bar" min="0" max="1" step="0.01" value="1">
+                    </div>
+                    <div id="video-container" class="video-container"></div>
+                    <div id="queue-area">
+                        <div class="queue-header">
+                            <h4>재생 목록 <span id="queue-count"></span></h4>
+                            <div class="queue-actions">
+                                <button class="btn-small" onclick="showQueueAddPicker()" title="곡 추가">+</button>
+                                <button class="btn-small btn-danger" onclick="removeCurrentFromQueue()" title="현재 곡 제거">−</button>
+                            </div>
+                        </div>
+                        <div id="queue-add-picker" class="quick-add" style="display:none">
+                            <select id="queue-add-select" onchange="addSelectedToQueue(this)">
+                                <option value="">-- 곡 선택 --</option>
+                            </select>
+                        </div>
+                        <ul id="queue-list"></ul>
+                    </div>
+                </div>
+                <div id="no-playlist-selected" class="empty-state">
+                    <p>플레이리스트를 선택하거나 라이브러리에서 노래를 재생하세요.</p>
+                </div>
+            </section>
+            <!-- UI Settings -->
+            <section id="ui" class="tab-content">
+                <div class="section-header">
+                    <h2>UI 설정</h2>
+                </div>
+                <div class="settings-group">
+                    <label>배경 이미지 <span class="badge badge-duration" style="font-size:0.75rem;vertical-align:middle">여러 개 등록 가능</span></label>
+                    <div class="add-form">
+                        <input type="url" id="bg-url" placeholder="이미지 URL 입력 후 추가">
+                        <button class="btn-primary" onclick="addBgImage()">추가</button>
+                        <input type="file" id="bg-file-input" accept="image/*" style="display:none">
+                        <button class="btn-primary" onclick="document.getElementById('bg-file-input').click()">파일 선택</button>
+                    </div>
+                    <div id="bg-drop-zone" class="drop-zone">
+                        <p>또는 이미지 파일을 끌어다 놓으세요</p>
+                    </div>
+                    <div id="bg-gallery" class="bg-gallery"></div>
+                    <div class="bg-mode-row">
+                        <label class="mode-radio">
+                            <input type="radio" name="bg-mode" value="single" onchange="setBgMode('single')"> 단일 이미지
+                        </label>
+                        <label class="mode-radio">
+                            <input type="radio" name="bg-mode" value="slideshow" onchange="setBgMode('slideshow')"> 슬라이드쇼
+                        </label>
+                        <div id="slideshow-options" class="slideshow-options" style="display:none">
+                            <span style="color:var(--text-secondary);font-size:0.85rem">전환 간격</span>
+                            <select id="bg-interval" onchange="setBgInterval(this.value)">
+                                <option value="5">5초</option>
+                                <option value="10">10초</option>
+                                <option value="15">15초</option>
+                                <option value="30">30초</option>
+                                <option value="60">1분</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                <div class="settings-group">
+                    <label>재생 버튼 이미지</label>
+                    <div class="add-form">
+                        <input type="url" id="play-btn-img-url" placeholder="이미지 URL">
+                        <button class="btn-primary" onclick="setPlayBtnImage()">적용</button>
+                        <input type="file" id="play-btn-file-input" accept="image/*" style="display:none">
+                        <button class="btn-primary" onclick="document.getElementById('play-btn-file-input').click()">파일 선택</button>
+                    </div>
+                    <div id="play-btn-drop-zone" class="drop-zone">
+                        <p>또는 이미지 파일을 끌어다 놓으세요</p>
+                    </div>
+                    <div id="play-btn-preview" class="btn-preview"></div>
+                    <button class="btn-small" onclick="clearPlayBtnImage()" style="margin-top:6px">초기화</button>
+                </div>
+                <div class="settings-group">
+                    <label>강조 색상</label>
+                    <div class="color-row">
+                        <input type="color" id="accent-color" value="#6c63ff">
+                        <button class="btn-primary" onclick="applyAccent()">적용</button>
+                    </div>
+                </div>
+                <div class="settings-group">
+                    <label>배경 흐림 효과 <span id="blur-value">10</span>px</label>
+                    <input type="range" id="bg-blur" min="0" max="30" value="10" step="1">
+                </div>
+                <div class="settings-group">
+                    <label>배경 어둡기 <span id="dim-value">50</span>%</label>
+                    <input type="range" id="bg-dim" min="0" max="90" value="50" step="5">
+                </div>
+                <div class="settings-actions">
+                    <button class="btn-danger" onclick="resetUI()">초기화</button>
+                </div>
+            </section>
+
+            <!-- Community -->
+            <section id="community" class="tab-content">
+                <div class="section-header">
+                    <h2>커뮤니티</h2>
+                    <p class="subtitle">플레이리스트를 공유하고 다른 사람의 플레이리스트를 가져오세요</p>
+                </div>
+
+                <!-- Share form -->
+                <div class="community-card">
+                    <h3>플레이리스트 공유하기</h3>
+                    <form id="share-form" class="share-form">
+                        <select id="share-playlist-sel" required>
+                            <option value="">-- 플레이리스트 선택 --</option>
+                        </select>
+                        <input type="text" id="share-author" placeholder="닉네임" required>
+                        <div class="category-row">
+                            <div class="category-group">
+                                <label>장르</label>
+                                <select id="share-genre" class="category-select">
+                                    <option value="pop">팝 (Pop)</option>
+                                    <option value="rnb">R&B</option>
+                                    <option value="rock">락 (Rock)</option>
+                                    <option value="ballad">발라드</option>
+                                    <option value="jpop">JPop</option>
+                                    <option value="kpop">KPop</option>
+                                    <option value="hiphop">힙합 (Hip Hop)</option>
+                                    <option value="edm">EDM</option>
+                                    <option value="indie">인디 (Indie)</option>
+                                    <option value="classic">클래식 (Classic)</option>
+                                    <option value="jazz">재즈 (Jazz)</option>
+                                    <option value="country">컨트리 (Country)</option>
+                                    <option value="folk">포크 (Folk)</option>
+                                    <option value="metal">메탈 (Metal)</option>
+                                    <option value="reggae">레게 (Reggae)</option>
+                                    <option value="soul">소울 (Soul)</option>
+                                    <option value="funk">펑크 (Funk)</option>
+                                    <option value="blues">블루스 (Blues)</option>
+                                    <option value="other">기타 (직접 입력)</option>
+                                </select>
+                                <input type="text" id="share-genre-custom" class="custom-input" placeholder="장르 직접 입력" style="display:none">
+                            </div>
+                            <div class="category-group">
+                                <label>예상 길이</label>
+                                <select id="share-duration" class="category-select">
+                                    <option value="30min">30분</option>
+                                    <option value="1h">1시간</option>
+                                    <option value="2h">2시간</option>
+                                    <option value="3h">3시간</option>
+                                    <option value="other">기타 (직접 입력)</option>
+                                </select>
+                                <input type="text" id="share-duration-custom" class="custom-input" placeholder="길이 직접 입력" style="display:none">
+                            </div>
+                        </div>
+                        <button type="submit" class="btn-primary">공유하기</button>
+                    </form>
+                </div>
+
+                <!-- Browse shared playlists -->
+                <div class="community-card">
+                    <h3>둘러보기</h3>
+                    <div id="shared-filter-bar" class="filter-bar"></div>
+                    <div id="shared-list" class="item-list"></div>
+                </div>
+
+                <!-- Import -->
+                <div class="community-card">
+                    <h3>JSON 파일로 가져오기</h3>
+                    <div class="import-row">
+                        <input type="file" id="import-file" accept=".json">
+                        <button class="btn-primary" onclick="importSharedPlaylist()">가져오기</button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Batch Edit Modal -->
+            <div id="batch-modal" class="modal-overlay">
+                <div class="modal-content batch-modal-content">
+                    <h3>파일 정보 수정 <span id="batch-count" class="batch-count"></span></h3>
+                    <div id="batch-list" class="batch-list"></div>
+                    <div class="modal-actions">
+                        <button class="btn-primary" onclick="confirmBatchAdd()">모두 추가</button>
+                        <button class="btn-small" onclick="closeBatchModal()">취소</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Profile Modal -->
+            <div id="profile-modal" class="modal-overlay">
+                <div class="modal-content profile-content">
+                    <div id="profile-banner" class="profile-banner">
+                        <div id="profile-banner-img" class="profile-banner-img"></div>
+                        <div id="profile-banner-edit" class="profile-banner-edit" style="display:none">
+                            <button class="btn-small" onclick="document.getElementById('profile-banner-file').click()">배너 변경</button>
+                            <input type="file" id="profile-banner-file" accept="image/*" style="display:none">
+                        </div>
+                        <img id="profile-avatar" class="profile-avatar" src="" alt="avatar">
+                        <div id="profile-avatar-edit" class="profile-avatar-edit" style="display:none">
+                            <button class="btn-small" onclick="document.getElementById('profile-avatar-file').click()">변경</button>
+                            <input type="file" id="profile-avatar-file" accept="image/*" style="display:none">
+                        </div>
+                    </div>
+                    <div class="profile-body">
+                        <h3 id="profile-display-name"></h3>
+                        <p id="profile-username" class="profile-username"></p>
+                        <p id="profile-bio" class="profile-bio"></p>
+                        <div id="profile-edit-fields" style="display:none">
+                            <input type="text" id="profile-edit-name" placeholder="표시 이름">
+                            <textarea id="profile-edit-bio" placeholder="소개" rows="3"></textarea>
+                        </div>
+                        <div class="profile-actions">
+                            <button id="profile-heart-btn" class="profile-heart-btn" onclick="heartProfile()">❤ <span id="profile-heart-count">0</span></button>
+                            <button id="profile-edit-btn" class="btn-small" onclick="toggleProfileEdit()" style="display:none">프로필 수정</button>
+                            <button id="profile-save-btn" class="btn-primary" onclick="saveProfile()" style="display:none">저장</button>
+                            <button id="profile-cancel-btn" class="btn-small" onclick="closeProfileModal()" style="display:none">취소</button>
+                            <button class="btn-small" onclick="closeProfileModal()">닫기</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Edit Modal -->
+            <div id="edit-modal" class="modal-overlay">
+                <div class="modal-content">
+                    <h3>노래 수정</h3>
+                    <form id="edit-form">
+                        <input type="text" id="edit-title" placeholder="노래 제목" required>
+                        <input type="text" id="edit-artist" placeholder="아티스트" required>
+                        <input type="url" id="edit-url" placeholder="오디오 URL">
+                        <div class="add-form" style="gap:6px;flex-wrap:wrap">
+                            <input type="url" id="edit-logo-url" placeholder="로고 이미지 URL (선택)" style="flex:1">
+                            <button type="button" class="btn-small" onclick="setEditLogo()">로고 적용</button>
+                            <input type="file" id="edit-logo-file" accept="image/*" style="display:none">
+                            <button type="button" class="btn-small" onclick="document.getElementById('edit-logo-file').click()">파일 선택</button>
+                            <button type="button" class="btn-small" onclick="clearEditLogo()" style="color:var(--danger)">로고 제거</button>
+                        </div>
+                        <div id="edit-logo-preview" class="song-logo-preview"></div>
+                        <div id="edit-logo-drop-zone" class="drop-zone" style="margin-bottom:6px">
+                            <p>로고 이미지 파일을 끌어다 놓으세요 (선택)</p>
+                        </div>
+                        <textarea id="edit-lyrics" class="lyrics-input" placeholder="가사 (선택)"></textarea>
+                        <div id="edit-drop-zone" class="drop-zone">
+                            <p>새 오디오/비디오 파일을 끌어다 놓으세요 (선택)</p>
+                        </div>
+                        <input type="hidden" id="edit-song-id">
+                        <div class="modal-actions">
+                            <button type="submit" class="btn-primary">저장</button>
+                            <button type="button" class="btn-small" onclick="closeEditModal()">취소</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Playlist Edit Modal -->
+            <div id="edit-playlist-modal" class="modal-overlay">
+                <div class="modal-content">
+                    <h3>플레이리스트 수정</h3>
+                    <form id="edit-playlist-form">
+                        <input type="text" id="edit-playlist-name" placeholder="플레이리스트 이름" required>
+                        <div class="add-form" style="gap:6px;flex-wrap:wrap">
+                            <input type="url" id="edit-pl-logo-url" placeholder="로고 이미지 URL (선택)" style="flex:1">
+                            <button type="button" class="btn-small" onclick="setEditPlLogo()">로고 적용</button>
+                            <input type="file" id="edit-pl-logo-file" accept="image/*" style="display:none">
+                            <button type="button" class="btn-small" onclick="document.getElementById('edit-pl-logo-file').click()">파일 선택</button>
+                            <button type="button" class="btn-small" onclick="clearEditPlLogo()" style="color:var(--danger)">로고 제거</button>
+                        </div>
+                        <div id="edit-pl-logo-preview" class="song-logo-preview"></div>
+                        <div id="edit-pl-logo-drop-zone" class="drop-zone" style="margin-bottom:6px">
+                            <p>로고 이미지 파일을 끌어다 놓으세요 (선택)</p>
+                        </div>
+                        <div class="modal-actions">
+                            <button type="submit" class="btn-primary">저장</button>
+                            <button type="button" class="btn-small" onclick="closeEditPlaylistModal()">취소</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <div id="video-storage" style="position:absolute;top:-9999px;left:-9999px;width:1px;height:1px;opacity:0.01;pointer-events:none">
+        <video id="video-player" playsinline></video>
+    </div>
+    <div id="audio-storage" style="position:absolute;top:-9999px;left:-9999px;width:1px;height:1px;opacity:0.01;pointer-events:none">
+        <audio id="audio-player"></audio>
+    </div>
+    <div id="yt-container" style="display:none;position:absolute;top:-9999px;left:-9999px;width:1px;height:1px"></div>
+    <div id="mini-video-bar" class="mini-video-bar" style="display:none">
+        <div class="mini-thumb" id="mini-thumb"></div>
+        <div class="mini-info">
+            <span class="mini-title" id="mini-title">재생 중</span>
+            <span class="mini-artist" id="mini-artist"></span>
+        </div>
+        <button class="btn-small" onclick="switchToPlayer()">열기</button>
+        <button class="btn-small" onclick="closeMiniPlayer()">닫기</button>
+    </div>
+    <div class="credit">Creator - Hika</div>
+    <script src="app.js"></script>
+</body>
+</html>
