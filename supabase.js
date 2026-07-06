@@ -2,13 +2,16 @@
 const SUPABASE_URL = "https://nbcyffvrzqytpyginpxe.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_8RTORBNeowwULojRBTM18g_t3fHCH0O";
 
-var _supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+const sbConfigured = SUPABASE_URL && SUPABASE_URL !== 'https://YOUR_PROJECT.supabase.co' && SUPABASE_ANON_KEY && SUPABASE_ANON_KEY !== 'your-anon-key-here';
+
+var _supabase = sbConfigured ? supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
     auth: { persistSession: true, autoRefreshToken: true }
-});
+}) : null;
 
 // ─── Auth ───
 
 async function sbRegister(username, password) {
+    if (!_supabase) throw new Error('Supabase가 설정되지 않았습니다');
     const { data, error } = await _supabase.auth.signUp({
         email: username + '@pl.local',
         password,
@@ -19,6 +22,7 @@ async function sbRegister(username, password) {
 }
 
 async function sbLogin(username, password) {
+    if (!_supabase) throw new Error('Supabase가 설정되지 않았습니다');
     const { data, error } = await _supabase.auth.signInWithPassword({
         email: username + '@pl.local',
         password
@@ -28,10 +32,11 @@ async function sbLogin(username, password) {
 }
 
 async function sbLogout() {
-    await _supabase.auth.signOut();
+    if (_supabase) await _supabase.auth.signOut();
 }
 
 function sbGetSession() {
+    if (!_supabase) return Promise.resolve({ data: { session: null } });
     return _supabase.auth.getSession();
 }
 
@@ -46,6 +51,7 @@ function sbUserId() {
 // ─── Songs ───
 
 async function sbLoadSongs(userId) {
+    if (!_supabase) return [];
     const { data } = await _supabase.from('songs').select('*').eq('user_id', userId);
     return data || [];
 }
@@ -61,6 +67,7 @@ function songToDb(s, userId) {
 }
 
 async function sbSaveSongs(userId, songs) {
+    if (!_supabase) return;
     const existing = await sbLoadSongs(userId);
     const existingIds = new Set(existing.map(s => s.id));
     const toUpsert = songs.filter(s => s.id && existingIds.has(s.id));
@@ -83,6 +90,7 @@ async function sbSaveSongs(userId, songs) {
 // ─── Playlists ───
 
 async function sbLoadPlaylists(userId) {
+    if (!_supabase) return [];
     const { data } = await _supabase.from('playlists').select('*').eq('user_id', userId);
     return data || [];
 }
@@ -97,6 +105,7 @@ function playlistToDb(p, userId) {
 }
 
 async function sbSavePlaylists(userId, playlists) {
+    if (!_supabase) return;
     const existing = await sbLoadPlaylists(userId);
     const existingIds = new Set(existing.map(p => p.id));
     const toUpsert = playlists.filter(p => p.id && existingIds.has(p.id));
@@ -152,11 +161,13 @@ function sharedFromDb(item) {
 }
 
 async function sbLoadShared() {
+    if (!_supabase) return [];
     const { data } = await _supabase.from('shared_playlists').select('*').order('created_at', { ascending: false });
     return (data || []).map(sharedFromDb);
 }
 
 async function sbAddShared(item) {
+    if (!_supabase) return;
     const userId = (await sbUserId()) || null;
     const { error } = await _supabase.from('shared_playlists').insert(sharedToDb({ ...item, user_id: userId }));
     if (error) throw new Error(error.message);
@@ -177,17 +188,20 @@ function updatesToDb(updates) {
 }
 
 async function sbUpdateShared(id, updates) {
+    if (!_supabase) return;
     const { error } = await _supabase.from('shared_playlists').update(updatesToDb(updates)).eq('id', id);
     if (error) throw new Error(error.message);
 }
 
 async function sbDeleteShared(id) {
+    if (!_supabase) return;
     await _supabase.from('shared_playlists').delete().eq('id', id);
 }
 
 // ─── Files (Supabase Storage) ───
 
 async function sbUploadFile(userId, file) {
+    if (!_supabase) throw new Error('Supabase가 설정되지 않았습니다');
     const path = userId + '/' + Date.now() + '_' + file.name;
     const { error } = await _supabase.storage.from('audio').upload(path, file, {
         contentType: file.type,
@@ -198,22 +212,26 @@ async function sbUploadFile(userId, file) {
 }
 
 async function sbGetFileUrl(path) {
+    if (!_supabase) return '';
     const { data } = _supabase.storage.from('audio').getPublicUrl(path);
     return data.publicUrl;
 }
 
 async function sbDeleteFile(path) {
+    if (!_supabase) return;
     await _supabase.storage.from('audio').remove([path]);
 }
 
 // ─── Profiles ───
 
 async function sbLoadProfile(username) {
+    if (!_supabase) return null;
     const { data } = await _supabase.from('profiles').select('*').eq('username', username).single();
     return data;
 }
 
 async function sbUpsertProfile(profile) {
+    if (!_supabase) return;
     const { error } = await _supabase.from('profiles').upsert(profile, { onConflict: 'id' });
     if (error) throw new Error(error.message);
 }
@@ -221,6 +239,7 @@ async function sbUpsertProfile(profile) {
 // ─── Storage helpers (for profile banner/avatar, etc.) ───
 
 async function sbUploadProfileFile(userId, folder, file) {
+    if (!_supabase) throw new Error('Supabase가 설정되지 않았습니다');
     const path = 'profile/' + userId + '/' + folder + '_' + Date.now();
     const { error } = await _supabase.storage.from('audio').upload(path, file, { upsert: true, contentType: file.type });
     if (error) throw new Error(error.message);
@@ -229,6 +248,7 @@ async function sbUploadProfileFile(userId, folder, file) {
 }
 
 async function sbHeartProfile(username, currentUsername) {
+    if (!_supabase) return null;
     const profile = await sbLoadProfile(username);
     if (!profile) return null;
     let hearts = profile.hearts || 0;
