@@ -4,9 +4,16 @@ const SUPABASE_ANON_KEY = "sb_publishable_8RTORBNeowwULojRBTM18g_t3fHCH0O";
 
 const sbConfigured = SUPABASE_URL && SUPABASE_URL !== 'https://YOUR_PROJECT.supabase.co' && SUPABASE_ANON_KEY && SUPABASE_ANON_KEY !== 'your-anon-key-here';
 
-var _supabase = sbConfigured ? supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-    auth: { persistSession: true, autoRefreshToken: true }
-}) : null;
+var _supabase = null;
+try {
+    if (sbConfigured && typeof supabase !== 'undefined' && supabase.createClient) {
+        _supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+            auth: { persistSession: true, autoRefreshToken: true }
+        });
+    }
+} catch (e) {
+    console.warn('Supabase init failed, falling back to localStorage', e);
+}
 
 // ─── Auth ───
 

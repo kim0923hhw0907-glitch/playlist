@@ -62,7 +62,8 @@ let sharedGenreFilter = 'all';
 let sharedDurationFilter = 'all';
 
 function userKey(base) {
-    return currentUser ? base + '_' + currentUser : base;
+    if (!currentUser || currentUser === '__legacy__') return base;
+    return base + '_' + currentUser;
 }
 
 async function loadUserData() {
@@ -1933,8 +1934,13 @@ async function loadSong(index) {
                     throw new Error('파일을 찾을 수 없습니다');
                 }
             } else {
-                const url = await sbGetFileUrl(song.filePath);
-                audio.src = url;
+                try {
+                    const url = await sbGetFileUrl(song.filePath);
+                    audio.src = url;
+                } catch (e) {
+                    console.warn('Failed to load Supabase file', e);
+                    throw new Error('파일을 불러올 수 없습니다');
+                }
             }
         } else if (song.fileId) {
             // Legacy: fileId-based
@@ -2325,8 +2331,12 @@ async function showApp() {
     document.getElementById('login-overlay').style.display = 'none';
     document.querySelector('.app').style.display = 'block';
     document.getElementById('user-info').style.display = 'flex';
-    const profile = currentUser ? await getMappedProfile(currentUser) : { displayName: currentUser };
-    document.getElementById('user-display').textContent = (profile.displayName || currentUser) + '님';
+    let displayName = currentUser;
+    try {
+        const profile = currentUser ? await getMappedProfile(currentUser) : null;
+        if (profile) displayName = profile.displayName || currentUser;
+    } catch (_) {}
+    document.getElementById('user-display').textContent = displayName + '님';
     loadYouTubeAPI();
     applyUI();
     renderLibrary();
@@ -2405,19 +2415,20 @@ async function loginUser(username, password) {
             return true;
         } catch (e) {
             console.warn('Supabase login failed, trying local fallback', e);
+            document.getElementById('login-error').textContent = '서버 연결 실패, 로컬 로그인 시도...';
         }
     }
     // Fallback: check localStorage for existing user data
-    const oldUserKey = 'pl_users';
-    const users = JSON.parse(localStorage.getItem(oldUserKey)) || [];
-    const storedHash = users.find(u => u.username === username)?.password;
-    if (storedHash && storedHash !== password) {
+    const users = JSON.parse(localStorage.getItem('pl_users')) || [];
+    const match = users.find(u => u.username === username);
+    if (match && match.password !== password) {
         document.getElementById('login-error').textContent = '비밀번호가 틀렸습니다.';
         return false;
     }
-    // Check if the user has any local data
-    const hasLocalData = localStorage.getItem('pl_songs2_' + username) !== null;
-    if (!storedHash && !hasLocalData) {
+    // Check all possible key formats for existing user data
+    const possibleKeys = ['pl_songs2_' + username, 'pl_songs2', 'pl_playlists2_' + username, 'pl_playlists2'];
+    const hasLocalData = possibleKeys.some(k => localStorage.getItem(k) !== null);
+    if (!match && !hasLocalData) {
         document.getElementById('login-error').textContent = '존재하지 않는 사용자입니다. 회원가입해 주세요.';
         return false;
     }
@@ -2426,10 +2437,10 @@ async function loginUser(username, password) {
     currentUser = username;
     localStorage.setItem(userKey('pl_session'), username);
     localStorage.setItem('pl_last_user', username);
-    // Load from localStorage directly
-    songs = JSON.parse(localStorage.getItem(userKey('pl_songs2'))) || [];
-    playlists = JSON.parse(localStorage.getItem(userKey('pl_playlists2'))) || [];
-    sharedPlaylists = JSON.parse(localStorage.getItem(userKey('pl_shared'))) || [];
+    // Load from localStorage – try suffixed key first, then fall back to plain key
+    songs = JSON.parse(localStorage.getItem(userKey('pl_songs2'))) || JSON.parse(localStorage.getItem('pl_songs2') || '[]');
+    playlists = JSON.parse(localStorage.getItem(userKey('pl_playlists2'))) || JSON.parse(localStorage.getItem('pl_playlists2') || '[]');
+    sharedPlaylists = JSON.parse(localStorage.getItem(userKey('pl_shared'))) || JSON.parse(localStorage.getItem('pl_shared') || '[]');
     const savedUI = JSON.parse(localStorage.getItem(userKey('pl_ui')));
     if (savedUI) {
         uiSettings = savedUI;
@@ -2503,17 +2514,20 @@ document.getElementById('user-display').addEventListener('click', () => {
             console.warn('Supabase session check failed', e);
         }
     }
-    // Fallback: check localStorage session / users list
+    // Fallback: check localStorage session / users list / legacy data
     const users = JSON.parse(localStorage.getItem('pl_users')) || [];
     const lastUser = localStorage.getItem('pl_last_user');
     const target = lastUser && users.some(u => u.username === lastUser) ? lastUser : users[0]?.username;
-    if (target) {
-        currentUser = target;
+    // If no users in pl_users, check for old-style data (no suffix or legacy)
+    const legacyUser = !target && localStorage.getItem('pl_songs2') !== null ? '__legacy__' : null;
+    const effectiveUser = target || legacyUser;
+    if (effectiveUser) {
+        currentUser = effectiveUser;
         sbUser = null;
-        songs = JSON.parse(localStorage.getItem(userKey('pl_songs2'))) || [];
-        playlists = JSON.parse(localStorage.getItem(userKey('pl_playlists2'))) || [];
-        sharedPlaylists = JSON.parse(localStorage.getItem(userKey('pl_shared'))) || [];
-        const savedUI = JSON.parse(localStorage.getItem(userKey('pl_ui')));
+        songs = JSON.parse(localStorage.getItem(userKey('pl_songs2'))) || JSON.parse(localStorage.getItem('pl_songs2') || '[]');
+        playlists = JSON.parse(localStorage.getItem(userKey('pl_playlists2'))) || JSON.parse(localStorage.getItem('pl_playlists2') || '[]');
+        sharedPlaylists = JSON.parse(localStorage.getItem(userKey('pl_shared'))) || JSON.parse(localStorage.getItem('pl_shared') || '[]');
+        const savedUI = JSON.parse(localStorage.getItem(userKey('pl_ui'))) || JSON.parse(localStorage.getItem('pl_ui') || 'null');
         if (savedUI) uiSettings = savedUI;
         showApp();
         return;
