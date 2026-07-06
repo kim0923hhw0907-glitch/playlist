@@ -1,4 +1,5 @@
 // Supabase client – fill in your project URL and anon key from https://supabase.com
+console.log('supabase.js loaded');
 const SUPABASE_URL = "https://nbcyffvrzqytpyginpxe.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_8RTORBNeowwULojRBTM18g_t3fHCH0O";
 
@@ -48,10 +49,12 @@ function sbGetSession() {
 }
 
 function sbOnAuth(callback) {
+    if (!_supabase) return { data: { subscription: { unsubscribe: () => {} } } };
     return _supabase.auth.onAuthStateChange(callback);
 }
 
 function sbUserId() {
+    if (!_supabase) return Promise.resolve(null);
     return _supabase.auth.getSession().then(({ data }) => data.session?.user?.id || null);
 }
 
@@ -96,19 +99,18 @@ async function sbSaveSongs(userId, songs) {
 
 // ─── Playlists ───
 
+function playlistToDb(p, userId) {
+    return {
+        id: p.id, user_id: userId,
+        name: p.name, song_ids: p.song_ids || [],
+        created_at: p.createdAt || Date.now()
+    };
+}
+
 async function sbLoadPlaylists(userId) {
     if (!_supabase) return [];
     const { data } = await _supabase.from('playlists').select('*').eq('user_id', userId);
     return data || [];
-}
-
-function playlistToDb(p, userId) {
-    return {
-        id: p.id, user_id: userId,
-        name: p.name,
-        logo: p.logo || '',
-        song_ids: p.songs || p.song_ids || []
-    };
 }
 
 async function sbSavePlaylists(userId, playlists) {

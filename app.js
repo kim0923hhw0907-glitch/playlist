@@ -1,3 +1,4 @@
+console.log('app.js loaded');
 const audio = document.getElementById('video-player');
 let isVideo = false;
 let audioCtx, analyser, vizAnimId;
@@ -2402,9 +2403,10 @@ async function registerUser(username, password) {
 }
 
 async function loginUser(username, password) {
+    console.log('loginUser called', username, sbConfigured, !!_supabase);
     document.getElementById('login-error').textContent = '';
     // Try Supabase first
-    if (sbConfigured) {
+    if (sbConfigured && _supabase) {
         try {
             const data = await sbLogin(username, password);
             sbUser = data.user;
@@ -2471,12 +2473,21 @@ async function logoutUser() {
     showLogin();
 }
 
-document.getElementById('login-btn').addEventListener('click', async () => {
-    const username = document.getElementById('login-username').value.trim();
-    const password = document.getElementById('login-password').value;
-    const ok = await loginUser(username, password);
-    if (ok) showApp();
-});
+// Expose login/register handlers globally (used by onclick attributes and addEventListener)
+async function handleLoginClick() {
+    try {
+        const username = document.getElementById('login-username').value.trim();
+        const password = document.getElementById('login-password').value;
+        console.log('Login clicked for:', username);
+        const ok = await loginUser(username, password);
+        if (ok) showApp();
+    } catch (e) {
+        console.error('handleLoginClick error:', e);
+        document.getElementById('login-error').textContent = '오류: ' + e.message;
+    }
+}
+
+document.getElementById('login-btn').addEventListener('click', handleLoginClick);
 
 document.getElementById('login-username').addEventListener('keydown', e => {
     if (e.key === 'Enter') document.getElementById('login-btn').click();
@@ -2485,11 +2496,19 @@ document.getElementById('login-password').addEventListener('keydown', e => {
     if (e.key === 'Enter') document.getElementById('login-btn').click();
 });
 
-document.getElementById('register-btn').addEventListener('click', async () => {
-    const username = document.getElementById('login-username').value.trim();
-    const password = document.getElementById('login-password').value;
-    await registerUser(username, password);
-});
+async function handleRegisterClick() {
+    try {
+        const username = document.getElementById('login-username').value.trim();
+        const password = document.getElementById('login-password').value;
+        console.log('Register clicked for:', username);
+        await registerUser(username, password);
+    } catch (e) {
+        console.error('handleRegisterClick error:', e);
+        document.getElementById('login-error').textContent = '오류: ' + e.message;
+    }
+}
+
+document.getElementById('register-btn').addEventListener('click', handleRegisterClick);
 
 document.getElementById('logout-btn').addEventListener('click', logoutUser);
 
@@ -2499,11 +2518,12 @@ document.getElementById('user-display').addEventListener('click', () => {
 
 // On page load, check session
 (async function init() {
+    console.log('init() running, sbConfigured:', sbConfigured, '_supabase:', !!_supabase);
     // Try Supabase session first
-    if (sbConfigured) {
+    if (sbConfigured && _supabase) {
         try {
             const { data } = await sbGetSession();
-            if (data.session) {
+            if (data && data.session) {
                 sbUser = data.session.user;
                 currentUser = sbUser.user_metadata?.username || sbUser.email?.replace('@pl.local', '') || 'user';
                 await loadUserData();
@@ -2515,22 +2535,27 @@ document.getElementById('user-display').addEventListener('click', () => {
         }
     }
     // Fallback: check localStorage session / users list / legacy data
-    const users = JSON.parse(localStorage.getItem('pl_users')) || [];
-    const lastUser = localStorage.getItem('pl_last_user');
-    const target = lastUser && users.some(u => u.username === lastUser) ? lastUser : users[0]?.username;
-    // If no users in pl_users, check for old-style data (no suffix or legacy)
-    const legacyUser = !target && localStorage.getItem('pl_songs2') !== null ? '__legacy__' : null;
-    const effectiveUser = target || legacyUser;
-    if (effectiveUser) {
-        currentUser = effectiveUser;
-        sbUser = null;
-        songs = JSON.parse(localStorage.getItem(userKey('pl_songs2'))) || JSON.parse(localStorage.getItem('pl_songs2') || '[]');
-        playlists = JSON.parse(localStorage.getItem(userKey('pl_playlists2'))) || JSON.parse(localStorage.getItem('pl_playlists2') || '[]');
-        sharedPlaylists = JSON.parse(localStorage.getItem(userKey('pl_shared'))) || JSON.parse(localStorage.getItem('pl_shared') || '[]');
-        const savedUI = JSON.parse(localStorage.getItem(userKey('pl_ui'))) || JSON.parse(localStorage.getItem('pl_ui') || 'null');
-        if (savedUI) uiSettings = savedUI;
-        showApp();
-        return;
+    try {
+        const users = JSON.parse(localStorage.getItem('pl_users')) || [];
+        const lastUser = localStorage.getItem('pl_last_user');
+        const target = lastUser && users.some(u => u.username === lastUser) ? lastUser : users[0]?.username;
+        const legacyUser = !target && localStorage.getItem('pl_songs2') !== null ? '__legacy__' : null;
+        const effectiveUser = target || legacyUser;
+        if (effectiveUser) {
+            console.log('init(): found local user', effectiveUser);
+            currentUser = effectiveUser;
+            sbUser = null;
+            songs = JSON.parse(localStorage.getItem(userKey('pl_songs2'))) || JSON.parse(localStorage.getItem('pl_songs2') || '[]');
+            playlists = JSON.parse(localStorage.getItem(userKey('pl_playlists2'))) || JSON.parse(localStorage.getItem('pl_playlists2') || '[]');
+            sharedPlaylists = JSON.parse(localStorage.getItem(userKey('pl_shared'))) || JSON.parse(localStorage.getItem('pl_shared') || '[]');
+            const savedUI = JSON.parse(localStorage.getItem(userKey('pl_ui'))) || JSON.parse(localStorage.getItem('pl_ui') || 'null');
+            if (savedUI) uiSettings = savedUI;
+            showApp();
+            return;
+        }
+    } catch (e) {
+        console.warn('init(): localStorage fallback failed', e);
     }
+    console.log('init(): showing login screen');
     showLogin();
 })();
