@@ -1461,7 +1461,7 @@ function setSharedDurationFilter(d) {
         const durationCustom = duration === 'other' ? document.getElementById('share-duration-custom').value.trim() : '';
         if (duration === 'other' && !durationCustom) { alert('길이를 직접 입력하세요'); return; }
 
-        // Build song data with optional file data
+        // Build song data — store file data in IndexedDB, keep only ref in shared playlist
         const songData = [];
         for (const s of songsList) {
             const entry = { title: s.title, artist: s.artist, url: s.url };
@@ -1469,17 +1469,15 @@ function setSharedDurationFilter(d) {
             if (s.lyrics) entry.lyrics = s.lyrics;
             if (s.isLocal) {
                 if (s.filePath && !s.filePath.startsWith('idxdb:')) {
-                    entry.filePath = s.filePath; // share the storage path
+                    entry.filePath = s.filePath;
                 } else if (s.fileId || (s.filePath && s.filePath.startsWith('idxdb:'))) {
                     try {
                         const fid = s.fileId || s.filePath.slice(6);
                         const stored = await dbGet(fid);
                         if (stored && stored.data) {
-                            entry.fileData = {
-                                base64: arrayBufferToBase64(stored.data),
-                                name: stored.name,
-                                type: stored.type
-                            };
+                            const refId = 'shared_' + uid();
+                            await dbPut(refId, stored.data, stored.name, stored.type);
+                            entry.fileRef = refId;
                         }
                     } catch (_) {}
                 }
@@ -1866,23 +1864,28 @@ async function applySharedPlaylist(id) {
             const fileSrc = ss.fileData || ss.fileRef;
             if (fileSrc) {
                 try {
-                    let buf;
+                    let buf, fname, ftype;
                     if (fileSrc.base64) {
                         buf = base64ToArrayBuffer(fileSrc.base64);
+                        fname = fileSrc.name;
+                        ftype = fileSrc.type;
                     } else if (fileSrc.id) {
                         const stored = await dbGet(fileSrc.id);
-                        if (stored && stored.data) buf = stored.data;
+                        if (stored && stored.data) { buf = stored.data; fname = stored.name; ftype = stored.type; }
+                    } else if (typeof fileSrc === 'string') {
+                        const stored = await dbGet(fileSrc);
+                        if (stored && stored.data) { buf = stored.data; fname = stored.name; ftype = stored.type; }
                     }
                     if (buf) {
                         if (sbUser) {
-                            const blob = new Blob([buf], { type: fileSrc.type || 'audio/mpeg' });
-                            const fakeFile = new File([blob], fileSrc.name || 'audio', { type: fileSrc.type || 'audio/mpeg' });
+                            const blob = new Blob([buf], { type: ftype || 'audio/mpeg' });
+                            const fakeFile = new File([blob], fname || 'audio', { type: ftype || 'audio/mpeg' });
                             newSong.filePath = await sbUploadFile(sbUser.id, fakeFile);
                             newSong.isLocal = true;
                             newSong.url = '';
                         } else {
                             const fid = (currentUser || 'anon') + '_' + uid();
-                            await dbPut(fid, buf, fileSrc.name, fileSrc.type);
+                            await dbPut(fid, buf, fname, ftype);
                             newSong.filePath = 'idxdb:' + fid;
                             newSong.isLocal = true;
                             newSong.url = '';
