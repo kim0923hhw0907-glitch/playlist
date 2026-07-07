@@ -84,10 +84,12 @@ async function loadUserData() {
         playlists = JSON.parse(localStorage.getItem(userKey('pl_playlists2'))) || [];
     }
     try {
-        sharedPlaylists = await sbLoadShared();
+        const serverData = await sbLoadShared();
+        const map = new Map(sharedPlaylists.map(p => [p.id, p]));
+        serverData.forEach(p => map.set(p.id, p));
+        sharedPlaylists = Array.from(map.values());
     } catch (e) {
         console.warn('Failed to load shared playlists', e);
-        sharedPlaylists = migrateSharedPlaylists();
     }
 
     const savedUI = JSON.parse(localStorage.getItem(userKey('pl_ui')));
@@ -1311,7 +1313,11 @@ async function renderCommunity() {
             playlists.map(p => '<option value="' + p.id + '">' + esc(p.name) + ' (' + p.songs.length + '곡)</option>').join('');
     }
     try {
-        sharedPlaylists = await sbLoadShared();
+        const serverData = await sbLoadShared();
+        // Merge with local shared playlists (preserve local-only entries from other accounts)
+        const map = new Map(sharedPlaylists.map(p => [p.id, p]));
+        serverData.forEach(p => map.set(p.id, p));
+        sharedPlaylists = Array.from(map.values());
     } catch (e) {
         console.warn('Failed to load shared playlists from server', e);
     }
