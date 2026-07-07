@@ -186,14 +186,14 @@ function isYouTubeUrl(url) {
 }
 
 const GENRE_LABELS = {
-    pop:'??, rnb:'R&B', rock:'??, ballad:'발라??, jpop:'JPop', kpop:'KPop',
-    hiphop:'?�합', edm:'EDM', indie:'?�디', classic:'?�래??, jazz:'?�즈',
-    country:'컨트�?, folk:'?�크', metal:'메탈', reggae:'?�게', soul:'?�울',
-    funk:'?�크', blues:'블루??, other:'기�?'
+    pop:'팝', rnb:'R&B', rock:'록', ballad:'발라드', jpop:'JPop', kpop:'KPop',
+    hiphop:'힙합', edm:'EDM', indie:'인디', classic:'클래식', jazz:'재즈',
+    country:'컨트리', folk:'포크', metal:'메탈', reggae:'레게', soul:'소울',
+    funk:'펑크', blues:'블루스', other:'기타'
 };
 
 const DURATION_LABELS = {
-    '30min':'30�?, '1h':'1?�간', '2h':'2?�간', '3h':'3?�간', other:'기�?'
+    '30min':'30분', '1h':'1시간', '2h':'2시간', '3h':'3시간', other:'기타'
 };
 
 let slideshowTimer = null;
@@ -242,8 +242,8 @@ function applyUI() {
     const preview = document.getElementById('play-btn-preview');
     if (preview) {
         preview.innerHTML = uiSettings.playBtnImage
-            ? '<div class="preview-circle" style="background-image:url(' + uiSettings.playBtnImage + ')"></div><span style="color:var(--text-secondary);font-size:0.82rem">커스?� ?��?지 ?�용??/span>'
-            : '<span style="color:var(--text-secondary);font-size:0.82rem">기본 버튼 (그라?�이??</span>';
+            ? '<div class="preview-circle" style="background-image:url(' + uiSettings.playBtnImage + ')"></div><span style="color:var(--text-secondary);font-size:0.82rem">커스텀 이미지 사용중</span>'
+            : '<span style="color:var(--text-secondary);font-size:0.82rem">기본 버튼 (그라데이션)</span>';
     }
 
     // Render gallery
@@ -279,20 +279,20 @@ function renderBgGallery() {
     if (!gallery) return;
     const images = uiSettings.bgImages;
     if (images.length === 0) {
-        gallery.innerHTML = '<p style="color:var(--text-secondary);font-size:0.82rem">?�록??배경 ?��?지가 ?�습?�다</p>';
+        gallery.innerHTML = '<p style="color:var(--text-secondary);font-size:0.82rem">등록된 배경 이미지가 없습니다</p>';
         return;
     }
     gallery.innerHTML = images.map((img, i) =>
         '<div class="bg-thumb' + (i === uiSettings.bgIndex ? ' active' : '') + '" onclick="setBgIndex(' + i + ')">' +
             '<img src="' + img + '" loading="lazy">' +
-            '<button class="del-btn" onclick="event.stopPropagation();removeBgImage(' + i + ')">??/button>' +
+            '<button class="del-btn" onclick="event.stopPropagation();removeBgImage(' + i + ')">✕</button>' +
         '</div>'
     ).join('');
 }
 
 function addBgImage() {
     const url = document.getElementById('bg-url').value.trim();
-    if (!url) { alert('?��?지 URL???�력?�거???�일 ?�택/?�래그하?�요.'); return; }
+    if (!url) { alert('이미지 URL을 입력하거나 파일 선택/드래그하세요.'); return; }
     uiSettings.bgImages.push(url);
     if (uiSettings.bgImages.length === 1) uiSettings.bgIndex = 0;
     document.getElementById('bg-url').value = '';
@@ -331,7 +331,7 @@ function setBgInterval(sec) {
 
 function setPlayBtnImage() {
     const url = document.getElementById('play-btn-img-url').value.trim();
-    if (!url) { alert('?��?지 URL???�력?�거???�일???�래그하?�요.'); return; }
+    if (!url) { alert('이미지 URL을 입력하거나 파일을 드래그하세요.'); return; }
     uiSettings.playBtnImage = url;
     document.getElementById('play-btn-img-url').value = '';
     saveUI();
@@ -384,7 +384,7 @@ function resetUI() {
 }
 
 function readImageFile(file, callback) {
-    if (!file || !file.type.startsWith('image/')) { alert('?��?지 ?�일�?지?�합?�다.'); return; }
+    if (!file || !file.type.startsWith('image/')) { alert('유효한 이미지 파일이 아닙니다.'); return; }
     const reader = new FileReader();
     reader.onload = function() { callback(reader.result); };
     reader.readAsDataURL(file);
@@ -645,7 +645,7 @@ function clearCreatePlLogo() {
 
 document.getElementById('create-pl-logo-file').addEventListener('change', function() {
     const file = this.files[0];
-    if (!file || !file.type.startsWith('image/')) { alert('?��?지 ?�일�?지?�합?�다.'); return; }
+    if (!file || !file.type.startsWith('image/')) { alert('유효한 이미지 파일이 아닙니다.'); return; }
     const reader = new FileReader();
     reader.onload = function() {
         pendingCreatePlLogo = reader.result;
@@ -714,7 +714,7 @@ audio.addEventListener('ended', () => {
 audio.addEventListener('error', () => {
     isPlaying = false;
     stopVisualizer();
-    document.getElementById('play-btn').textContent = '??;
+    document.getElementById('play-btn').textContent = '오류';
 });
 
 document.addEventListener('keydown', e => {
@@ -756,7 +756,7 @@ libSection.addEventListener('drop', async e => {
     dropOverlay.classList.remove('visible');
     const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('audio/') || f.type.startsWith('video/'));
     if (files.length === 0) {
-        alert('?�디???�는 비디???�일�?추�??????�습?�다.');
+        alert('오디오 또는 비디오 파일만 추가할 수 있습니다.');
         return;
     }
     if (files.length === 1) {
@@ -772,7 +772,7 @@ async function addFileSong(file) {
     const data = await file.arrayBuffer();
     const meta = readAudioMetadata(data);
     const title = meta.title || file.name.replace(/\.[^.]+$/, '');
-    const artist = meta.artist || '?????�음';
+    const artist = meta.artist || '알 수 없음';
     let filePath = '';
     if (sbUser) {
         try {
@@ -799,7 +799,7 @@ let pendingBatch = [];
 async function showBatchModal(files) {
     const list = document.getElementById('batch-list');
     const count = document.getElementById('batch-count');
-    count.textContent = '(' + files.length + '�?';
+    count.textContent = '(' + files.length + '개)';
     pendingBatch = [];
     list.innerHTML = '';
 
@@ -809,7 +809,7 @@ async function showBatchModal(files) {
         const data = await file.arrayBuffer();
         const meta = readAudioMetadata(data);
         const title = meta.title || file.name.replace(/\.[^.]+$/, '');
-        const artist = meta.artist || '?????�음';
+const artist = meta.artist || '알 수 없음';
 
         pendingBatch.push({ file, fid, data, name: file.name, title, artist, meta, type: file.type });
 
@@ -818,8 +818,8 @@ async function showBatchModal(files) {
         item.innerHTML =
             '<span class="batch-item-index">' + (i + 1) + '</span>' +
             '<div class="batch-item-fields">' +
-            '<input class="batch-title" value="' + esc(title).replace(/"/g, '&quot;') + '" placeholder="?�목">' +
-            '<input class="batch-artist" value="' + esc(artist).replace(/"/g, '&quot;') + '" placeholder="?�티?�트">' +
+            '<input class="batch-title" value="' + esc(title).replace(/"/g, '&quot;') + '" placeholder="제목">' +
+            '<input class="batch-artist" value="' + esc(artist).replace(/"/g, '&quot;') + '" placeholder="아티스트">' +
             '</div>';
         item.querySelector('.batch-title').dataset.idx = i;
         item.querySelector('.batch-artist').dataset.idx = i;
@@ -899,14 +899,14 @@ async function deleteSong(id) {
 function renderLibrary() {
     const artists = getArtists();
     const filter = document.getElementById('filter-bar');
-    filter.innerHTML = '<button class="chip' + (selectedArtist === 'all' ? ' active' : '') + '" data-filter="all">?�체</button>' +
+    filter.innerHTML = '<button class="chip' + (selectedArtist === 'all' ? ' active' : '') + '" data-filter="all">전체</button>' +
         artists.map(a => '<button class="chip' + (selectedArtist === a ? ' active' : '') + '" data-filter="' + esc(a).replace(/'/g, '&#39;') + '">' + esc(a) + '</button>').join('');
 
     const filtered = selectedArtist === 'all' ? songs : songs.filter(s => s.artist === selectedArtist);
 
     const list = document.getElementById('song-list');
     if (filtered.length === 0) {
-        list.innerHTML = '<div class="empty-state">' + (songs.length === 0 ? '?�?�된 ?�래가 ?�습?�다. ?�에???�래�?추�??�거???�일???�래그하?�요.' : '???�티?�트???�래가 ?�습?�다.') + '</div>';
+        list.innerHTML = '<div class="empty-state">' + (songs.length === 0 ? '저장된 노래가 없습니다. 새로 노래를 추가하거나 파일을 드래그하세요.' : '선택한 아티스트의 노래가 없습니다.') + '</div>';
         return;
     }
     list.innerHTML = filtered.map(s =>
@@ -914,16 +914,16 @@ function renderLibrary() {
             '<div class="info">' +
                 (s.logo
                     ? '<img class="song-logo" src="' + esc(s.logo) + '">'
-                    : '<div class="song-logo-placeholder">??/div>') +
+                    : '<div class="song-logo-placeholder">></div>') +
                 '<div class="text-group">' +
                     '<h4>' + esc(s.title) + '</h4>' +
                     '<p>' + esc(s.artist) + '</p>' +
                 '</div>' +
             '</div>' +
             '<div class="actions">' +
-                '<button class="btn-small play-btn" onclick="playLibrarySong(\'' + s.id + '\')">?�생</button>' +
-                '<button class="btn-small" onclick="editSong(\'' + s.id + '\')">?�정</button>' +
-                '<button class="btn-danger" onclick="deleteSong(\'' + s.id + '\')">??��</button>' +
+                '<button class="btn-small play-btn" onclick="playLibrarySong(\'' + s.id + '\')">재생</button>' +
+                '<button class="btn-small" onclick="editSong(\'' + s.id + '\')">수정</button>' +
+                '<button class="btn-danger" onclick="deleteSong(\'' + s.id + '\')">삭제</button>' +
             '</div>' +
         '</div>'
     ).join('');
@@ -939,7 +939,7 @@ function editSong(id) {
     document.getElementById('edit-url').value = song.url || '';
     document.getElementById('edit-logo-url').value = '';
     document.getElementById('edit-lyrics').value = song.lyrics || '';
-    document.getElementById('edit-drop-zone').querySelector('p').textContent = '???�디???�일???�어???�으?�요 (?�택)';
+    document.getElementById('edit-drop-zone').querySelector('p').textContent = '오디오/비디오 파일을 끌어다 놓으세요 (선택)';
     pendingEditFile = null;
     renderEditLogoPreview(song.logo || '');
     document.getElementById('edit-modal').classList.add('show');
@@ -959,9 +959,9 @@ let pendingEditLogo = null;
 function renderEditLogoPreview(url) {
     const el = document.getElementById('edit-logo-preview');
     if (url) {
-        el.innerHTML = '<img src="' + esc(url) + '"><span style="color:var(--text-secondary);font-size:0.82rem">로고 ?�용??/span>';
+        el.innerHTML = '<img src="' + esc(url) + '"><span style="color:var(--text-secondary);font-size:0.82rem">로고 사용중</span>';
     } else {
-        el.innerHTML = '<span style="color:var(--text-secondary);font-size:0.82rem">로고 ?�음</span>';
+        el.innerHTML = '<span style="color:var(--text-secondary);font-size:0.82rem">로고 없음</span>';
     }
 }
 
@@ -980,7 +980,7 @@ function clearEditLogo() {
 
 document.getElementById('edit-logo-file').addEventListener('change', function() {
     const file = this.files[0];
-    if (!file || !file.type.startsWith('image/')) { alert('?��?지 ?�일�?지?�합?�다.'); return; }
+    if (!file || !file.type.startsWith('image/')) { alert('유효한 이미지 파일이 아닙니다.'); return; }
     const reader = new FileReader();
     reader.onload = function() {
         pendingEditLogo = reader.result;
@@ -1006,7 +1006,7 @@ if (editLogoDropZone) {
         e.stopPropagation();
         editLogoDropZone.classList.remove('drag-over');
         const file = e.dataTransfer.files[0];
-        if (!file || !file.type.startsWith('image/')) { alert('?��?지 ?�일�?지?�합?�다.'); return; }
+        if (!file || !file.type.startsWith('image/')) { alert('유효한 이미지 파일이 아닙니다.'); return; }
         const reader = new FileReader();
         reader.onload = function() {
             pendingEditLogo = reader.result;
@@ -1103,9 +1103,9 @@ function closeEditPlaylistModal() {
 function renderEditPlLogoPreview(url) {
     const el = document.getElementById('edit-pl-logo-preview');
     if (url) {
-        el.innerHTML = '<img src="' + esc(url) + '"><span style="color:var(--text-secondary);font-size:0.82rem">로고 ?�용??/span>';
+        el.innerHTML = '<img src="' + esc(url) + '"><span style="color:var(--text-secondary);font-size:0.82rem">로고 사용중</span>';
     } else {
-        el.innerHTML = '<span style="color:var(--text-secondary);font-size:0.82rem">로고 ?�음</span>';
+        el.innerHTML = '<span style="color:var(--text-secondary);font-size:0.82rem">로고 없음</span>';
     }
 }
 
@@ -1124,7 +1124,7 @@ function clearEditPlLogo() {
 
 document.getElementById('edit-pl-logo-file').addEventListener('change', function() {
     const file = this.files[0];
-    if (!file || !file.type.startsWith('image/')) { alert('?��?지 ?�일�?지?�합?�다.'); return; }
+    if (!file || !file.type.startsWith('image/')) { alert('유효한 이미지 파일이 아닙니다.'); return; }
     const reader = new FileReader();
     reader.onload = function() {
         pendingEditPlLogo = reader.result;
@@ -1149,7 +1149,7 @@ if (editPlLogoDropZone) {
         e.stopPropagation();
         editPlLogoDropZone.classList.remove('drag-over');
         const file = e.dataTransfer.files[0];
-        if (!file || !file.type.startsWith('image/')) { alert('?��?지 ?�일�?지?�합?�다.'); return; }
+        if (!file || !file.type.startsWith('image/')) { alert('유효한 이미지 파일이 아닙니다.'); return; }
         const reader = new FileReader();
         reader.onload = function() {
             pendingEditPlLogo = reader.result;
@@ -1230,7 +1230,7 @@ function renderPlaylists() {
     const list = document.getElementById('playlist-list');
     if (!list) return;
     if (playlists.length === 0) {
-        list.innerHTML = '<div class="empty-state">?�성???�레?�리?�트가 ?�습?�다.</div>';
+        list.innerHTML = '<div class="empty-state">생성된 플레이리스트가 없습니다.</div>';
         return;
     }
     list.innerHTML = playlists.map(pl => {
@@ -1242,37 +1242,37 @@ function renderPlaylists() {
         return '<div class="card playlist-card"><div style="width:100%">' +
             '<div class="playlist-header">' +
                 '<div class="info" onclick="toggleExpandPlaylist(\'' + pl.id + '\')">' +
-                    (pl.logo ? '<img class="playlist-logo" src="' + esc(pl.logo) + '">' : '<div class="playlist-logo-placeholder">??/div>') +
+                    (pl.logo ? '<img class="playlist-logo" src="' + esc(pl.logo) + '">' : '<div class="playlist-logo-placeholder">></div>') +
                     '<div class="text-group">' +
                         '<h4>' + esc(pl.name) + '</h4>' +
-                        '<p>' + pl.songs.length + '�?/p>' +
+                        '<p>' + pl.songs.length + '곡</p>' +
                     '</div>' +
                 '</div>' +
                 '<div class="actions">' +
-                    (plSongs.length > 0 ? '<button class="btn-small play-btn" onclick="playPlaylist(\'' + pl.id + '\', 0)">?�체 ?�생</button>' : '') +
+                    (plSongs.length > 0 ? '<button class="btn-small play-btn" onclick="playPlaylist(\'' + pl.id + '\', 0)">전체 재생</button>' : '') +
                     (availSongs.length > 0 ? '<button class="btn-small" onclick="event.stopPropagation();toggleQuickAdd(\'' + pl.id + '\')">+</button>' : '') +
-                    '<button class="btn-small" onclick="event.stopPropagation();openEditPlaylistModal(\'' + pl.id + '\')">?�정</button>' +
-                    '<button class="btn-danger" onclick="deletePlaylist(\'' + pl.id + '\')">??��</button>' +
+                    '<button class="btn-small" onclick="event.stopPropagation();openEditPlaylistModal(\'' + pl.id + '\')">수정</button>' +
+                    '<button class="btn-danger" onclick="deletePlaylist(\'' + pl.id + '\')">삭제</button>' +
                 '</div>' +
             '</div>' +
             '<div id="' + quickAddId + '" class="quick-add" style="display:none">' +
                 '<select onchange="quickAddSong(\'' + pl.id + '\', this.value, this)">' +
-                    '<option value="">-- �??�택 --</option>' +
+                    '<option value="">-- 노래 선택 --</option>' +
                     availSongs.map(s => '<option value="' + s.id + '">' + esc(s.title) + ' - ' + esc(s.artist) + '</option>').join('') +
                 '</select>' +
             '</div>' +
             (expanded ? '<div class="playlist-body">' +
                 '<ul class="playlist-songs">' +
-                    (plSongs.length === 0 ? '<li style="color:var(--text-secondary);justify-content:center;border:none;padding:12px 0">곡이 ?�습?�다</li>' :
+                    (plSongs.length === 0 ? '<li style="color:var(--text-secondary);justify-content:center;border:none;padding:12px 0">곡이 없습니다</li>' :
                     plSongs.map((s, i) =>
                         '<li>' +
-                            (s.logo ? '<img class="song-logo" src="' + esc(s.logo) + '">' : '<div class="song-logo-placeholder">??/div>') +
+                            (s.logo ? '<img class="song-logo" src="' + esc(s.logo) + '">' : '<div class="song-logo-placeholder">></div>') +
                             '<div class="song-info"><span>' + esc(s.title) + '</span><span style="color:var(--text-secondary);font-size:0.82rem"> - ' + esc(s.artist) + '</span></div>' +
                             '<div class="actions">' +
-                                '<button class="reorder-btn" onclick="moveSongInPlaylist(\'' + pl.id + '\', ' + i + ', -1)"' + (i === 0 ? ' disabled' : '') + '>??/button>' +
-                                '<button class="reorder-btn" onclick="moveSongInPlaylist(\'' + pl.id + '\', ' + i + ', 1)"' + (i === plSongs.length - 1 ? ' disabled' : '') + '>??/button>' +
-                                '<button class="btn-small" onclick="playPlaylist(\'' + pl.id + '\', ' + i + ')">?�생</button>' +
-                                '<button class="btn-small btn-danger" onclick="removeSongFromPlaylist(\'' + pl.id + '\', ' + i + ')" title="?�거">??/button>' +
+                                '<button class="reorder-btn" onclick="moveSongInPlaylist(\'' + pl.id + '\', ' + i + ', -1)"' + (i === 0 ? ' disabled' : '') + '>▲</button>' +
+                                '<button class="reorder-btn" onclick="moveSongInPlaylist(\'' + pl.id + '\', ' + i + ', 1)"' + (i === plSongs.length - 1 ? ' disabled' : '') + '>▼</button>' +
+                                '<button class="btn-small" onclick="playPlaylist(\'' + pl.id + '\', ' + i + ')">재생</button>' +
+                                '<button class="btn-small btn-danger" onclick="removeSongFromPlaylist(\'' + pl.id + '\', ' + i + ')" title="제거">✕</button>' +
                             '</div>' +
                         '</li>'
                     ).join('')) +
@@ -1280,12 +1280,12 @@ function renderPlaylists() {
                 (availSongs.length > 0 ?
                     '<div class="playlist-add">' +
                         '<select id="' + addId + '">' +
-                            '<option value="">-- �??�택 --</option>' +
+                            '<option value="">-- 노래 선택 --</option>' +
                             availSongs.map(s => '<option value="' + s.id + '">' + esc(s.title) + ' - ' + esc(s.artist) + '</option>').join('') +
                         '</select>' +
-                        '<button class="btn-primary" onclick="addSongFromSelect(\'' + pl.id + '\')">추�?</button>' +
+                        '<button class="btn-primary" onclick="addSongFromSelect(\'' + pl.id + '\')">추가</button>' +
                     '</div>' :
-                    '<p style="color:var(--text-secondary);margin-top:10px;font-size:0.85rem">추�???곡이 ?�습?�다</p>') +
+                    '<p style="color:var(--text-secondary);margin-top:10px;font-size:0.85rem">추가할 곡이 없습니다</p>') +
             '</div>' : '') +
         '</div></div>';
     }).join('');
@@ -1315,8 +1315,8 @@ function addSongFromSelect(pid) {
 async function renderCommunity() {
     const sel = document.getElementById('share-playlist-sel');
     if (sel) {
-        sel.innerHTML = '<option value="">-- ?�레?�리?�트 ?�택 --</option>' +
-            playlists.map(p => '<option value="' + p.id + '">' + esc(p.name) + ' (' + p.songs.length + '�?</option>').join('');
+        sel.innerHTML = '<option value="">-- 플레이리스트 선택 --</option>' +
+            playlists.map(p => '<option value="' + p.id + '">' + esc(p.name) + ' (' + p.songs.length + '곡)</option>').join('');
     }
     try {
         const serverData = await sbLoadShared();
@@ -1350,30 +1350,30 @@ function renderSharedPlaylists() {
         const genres = [...new Set(sharedPlaylists.filter(s => s.genre !== 'other').map(s => s.genre))];
         const durations = [...new Set(sharedPlaylists.filter(s => s.duration !== 'other').map(s => s.duration))];
         filterBar.innerHTML =
-            '<div class="filter-section"><span class="filter-label">?�르</span>' +
-            '<button class="chip' + (sharedGenreFilter === 'all' ? ' active' : '') + '" onclick="setSharedGenreFilter(\'all\')">?�체</button>' +
+            '<div class="filter-section"><span class="filter-label">장르</span>' +
+            '<button class="chip' + (sharedGenreFilter === 'all' ? ' active' : '') + '" onclick="setSharedGenreFilter(\'all\')">전체</button>' +
             genres.map(g => '<button class="chip' + (sharedGenreFilter === g ? ' active' : '') + '" onclick="setSharedGenreFilter(\'' + g + '\')">' + esc(getGenreLabel(g)) + '</button>').join('') +
             '</div>' +
             '<div class="filter-section"><span class="filter-label">길이</span>' +
-            '<button class="chip' + (sharedDurationFilter === 'all' ? ' active' : '') + '" onclick="setSharedDurationFilter(\'all\')">?�체</button>' +
+            '<button class="chip' + (sharedDurationFilter === 'all' ? ' active' : '') + '" onclick="setSharedDurationFilter(\'all\')">전체</button>' +
             durations.map(d => '<button class="chip' + (sharedDurationFilter === d ? ' active' : '') + '" onclick="setSharedDurationFilter(\'' + d + '\')">' + esc(getDurationLabel(d)) + '</button>').join('') +
             '</div>';
     }
 
     if (filtered.length === 0) {
-        list.innerHTML = '<div class="empty-state">' + (sharedPlaylists.length === 0 ? '?�직 공유???�레?�리?�트가 ?�습?�다.<br>?�에??직접 공유?�거??JSON ?�일??가?�오?�요.' : '조건??맞는 ?�레?�리?�트가 ?�습?�다.') + '</div>';
+        list.innerHTML = '<div class="empty-state">' + (sharedPlaylists.length === 0 ? '아직 공유된 플레이리스트가 없습니다.<br>먼저 직접 공유하거나 JSON 파일을 가져오세요.' : '조건에 맞는 플레이리스트가 없습니다.') + '</div>';
         return;
     }
 
     list.innerHTML = filtered.map(sp => {
-        const genreLabel = sp.genre === 'other' ? (sp.genreCustom || '기�?') : getGenreLabel(sp.genre);
-        const durLabel = sp.duration === 'other' ? (sp.durationCustom || '기�?') : getDurationLabel(sp.duration);
+        const genreLabel = sp.genre === 'other' ? (sp.genreCustom || '기타') : getGenreLabel(sp.genre);
+        const durLabel = sp.duration === 'other' ? (sp.durationCustom || '기타') : getDurationLabel(sp.duration);
         const liked = currentUser && sp.likedBy && sp.likedBy.includes(currentUser);
         const disliked = currentUser && sp.dislikedBy && sp.dislikedBy.includes(currentUser);
         const commId = 'comm-' + sp.id;
         return '<div class="shared-card">' +
             '<div class="shared-card-header">' +
-                (sp.logo ? '<img class="playlist-logo" src="' + esc(sp.logo) + '">' : '<div class="playlist-logo-placeholder">??/div>') +
+                (sp.logo ? '<img class="playlist-logo" src="' + esc(sp.logo) + '">' : '<div class="playlist-logo-placeholder">></div>') +
                 '<div class="info">' +
                     '<h4>' + esc(sp.title) + '</h4>' +
                     '<span class="author" onclick="showProfile(\'' + esc(encodeURIComponent(sp.sharedBy || sp.author)) + '\')">' + esc(sp.author) + '</span>' +
@@ -1384,27 +1384,27 @@ function renderSharedPlaylists() {
                 '<span class="badge badge-duration">' + esc(durLabel) + '</span>' +
             '</div>' +
             '<div class="shared-card-meta">' +
-                '<span class="song-count">' + sp.songs.length + '�?/span>' +
+                '<span class="song-count">' + sp.songs.length + '곡</span>' +
                 '<div class="shared-card-rating">' +
-                    '<button class="rate-btn' + (liked ? ' active' : '') + '" onclick="likeSharedPlaylist(\'' + sp.id + '\')" title="좋아??>?�� <span id="like-cnt-' + sp.id + '">' + (sp.likes || 0) + '</span></button>' +
-                    '<button class="rate-btn' + (disliked ? ' active' : '') + '" onclick="dislikeSharedPlaylist(\'' + sp.id + '\')" title="?�어??>?�� <span id="dislike-cnt-' + sp.id + '">' + (sp.dislikes || 0) + '</span></button>' +
+                    '<button class="rate-btn' + (liked ? ' active' : '') + '" onclick="likeSharedPlaylist(\'' + sp.id + '\')" title="좋아요">👍 <span id="like-cnt-' + sp.id + '">' + (sp.likes || 0) + '</span></button>' +
+                    '<button class="rate-btn' + (disliked ? ' active' : '') + '" onclick="dislikeSharedPlaylist(\'' + sp.id + '\')" title="싫어요">👎 <span id="dislike-cnt-' + sp.id + '">' + (sp.dislikes || 0) + '</span></button>' +
                 '</div>' +
                 '<div class="shared-card-actions">' +
-                    '<button class="btn-small" onclick="applySharedPlaylist(\'' + sp.id + '\')">???�이브러리에 추�?</button>' +
-                    '<button class="btn-small" onclick="document.getElementById(\'' + commId + '\').classList.toggle(\'visible\')">?��? ' + ((sp.comments && sp.comments.length) || 0) + '</button>' +
-                    '<button class="btn-small" onclick="downloadSharedPlaylist(\'' + sp.id + '\')">?�운로드</button>' +
-                    '<button class="btn-small btn-danger" onclick="deleteSharedPlaylist(\'' + sp.id + '\')">??��</button>' +
+                    '<button class="btn-small" onclick="applySharedPlaylist(\'' + sp.id + '\')">내 라이브러리에 추가</button>' +
+                    '<button class="btn-small" onclick="document.getElementById(\'' + commId + '\').classList.toggle(\'visible\')">댓글 ' + ((sp.comments && sp.comments.length) || 0) + '</button>' +
+                    '<button class="btn-small" onclick="downloadSharedPlaylist(\'' + sp.id + '\')">다운로드</button>' +
+                    '<button class="btn-small btn-danger" onclick="deleteSharedPlaylist(\'' + sp.id + '\')">삭제</button>' +
                 '</div>' +
             '</div>' +
             '<div id="' + commId + '" class="shared-comments">' +
                 '<div class="comments-list">' +
                     (sp.comments && sp.comments.length
                         ? sp.comments.map(c => '<div class="comment"><b>' + esc(c.author) + '</b> <span>' + esc(c.text) + '</span></div>').join('')
-                        : '<p class="no-comments">?�직 ?��????�습?�다.</p>') +
+                        : '<p class="no-comments">아직 댓글이 없습니다.</p>') +
                 '</div>' +
                 '<div class="comment-input-row">' +
-                    '<input type="text" class="comment-input" id="' + commId + '-input" placeholder="?��? ?�성...">' +
-                    '<button class="btn-small" onclick="addComment(\'' + sp.id + '\')">?�성</button>' +
+                    '<input type="text" class="comment-input" id="' + commId + '-input" placeholder="댓글 작성...">' +
+                    '<button class="btn-small" onclick="addComment(\'' + sp.id + '\')">작성</button>' +
                 '</div>' +
             '</div>' +
         '</div>';
@@ -1429,17 +1429,17 @@ function setSharedDurationFilter(d) {
         e.preventDefault();
         const plId = document.getElementById('share-playlist-sel').value;
         const pl = playlists.find(p => p.id === plId);
-        if (!pl) { alert('?�레?�리?�트�??�택?�세??'); return; }
+        if (!pl) { alert('플레이리스트를 선택하세요'); return; }
         const songsList = getPlaylistSongs(plId);
-        if (songsList.length === 0) { alert('?�레?�리?�트??곡이 ?�습?�다.'); return; }
+        if (songsList.length === 0) { alert('플레이리스트에 곡이 없습니다.'); return; }
 
         const genre = document.getElementById('share-genre').value;
         const genreCustom = genre === 'other' ? document.getElementById('share-genre-custom').value.trim() : '';
-        if (genre === 'other' && !genreCustom) { alert('?�르�?직접 ?�력?�세??'); return; }
+        if (genre === 'other' && !genreCustom) { alert('장르를 직접 입력하세요'); return; }
 
         const duration = document.getElementById('share-duration').value;
         const durationCustom = duration === 'other' ? document.getElementById('share-duration-custom').value.trim() : '';
-        if (duration === 'other' && !durationCustom) { alert('길이�?직접 ?�력?�세??'); return; }
+        if (duration === 'other' && !durationCustom) { alert('길이를 직접 입력하세요'); return; }
 
         // Build song data with optional file data
         const songData = [];
@@ -1489,7 +1489,7 @@ function setSharedDurationFilter(d) {
         document.getElementById('share-genre-custom').style.display = 'none';
         document.getElementById('share-duration-custom').style.display = 'none';
         const fileCount = songData.filter(s => s.fileData || s.fileRef).length;
-        alert('?�레?�리?�트가 공유?�었?�니?? (' + fileCount + '�??�일 ?�함)');
+        alert('플레이리스트가 공유되었습니다 (' + fileCount + '개 파일 포함)');
     });
 
     // Toggle custom inputs
@@ -1526,7 +1526,7 @@ async function downloadSharedPlaylist(id) {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = sp.title.replace(/[^a-zA-Z0-9가-??/g, '_') + '.json';
+    a.download = sp.title.replace(/[^a-zA-Z0-9가-힣]/g, '_') + '.json';
     a.click();
     URL.revokeObjectURL(url);
 }
@@ -1534,7 +1534,7 @@ async function downloadSharedPlaylist(id) {
 async function importSharedPlaylist() {
     const input = document.getElementById('import-file');
     const file = input.files[0];
-    if (!file) { alert('JSON ?�일???�택?�세??'); return; }
+    if (!file) { alert('JSON 파일을 선택하세요'); return; }
     try {
         const text = await new Promise((resolve, reject) => {
             const r = new FileReader();
@@ -1544,7 +1544,7 @@ async function importSharedPlaylist() {
         });
         const data = JSON.parse(text);
         if (!data.title || !data.author || !Array.isArray(data.songs)) {
-            throw new Error('?�바�??�레?�리?�트 ?�식???�닙?�다.');
+            throw new Error('올바른 플레이리스트 형식이 아닙니다.');
         }
         data.id = uid();
         data.createdAt = Date.now();
@@ -1559,9 +1559,9 @@ async function importSharedPlaylist() {
         renderSharedPlaylists();
         input.value = '';
         const fileCount = data.songs.filter(s => s.fileData).length;
-        alert('?�레?�리?�트�?가?�왔?�니??' + (fileCount ? ' (' + fileCount + '�??�일 ?�함)' : ''));
+        alert('플레이리스트가 가져와졌습니다' + (fileCount ? ' (' + fileCount + '개 파일 포함)' : ''));
     } catch (err) {
-        alert('?�일???�을 ???�습?�다: ' + err.message);
+        alert('파일을 읽을 수 없습니다: ' + err.message);
     }
 }
 
@@ -1569,10 +1569,10 @@ async function deleteSharedPlaylist(id) {
     const sp = sharedPlaylists.find(p => p.id === id);
     if (!sp) return;
     if (sp.sharedBy && sp.sharedBy !== currentUser) {
-        alert('?�신??공유???�레?�리?�트�???��?????�습?�다.');
+        alert('다른 사람의 공유 플레이리스트는 삭제할 수 없습니다.');
         return;
     }
-    if (!confirm('??공유 ?�레?�리?�트�???��?�시겠습?�까?')) return;
+    if (!confirm('이 공유 플레이리스트를 삭제하시겠습니까?')) return;
     sharedPlaylists = sharedPlaylists.filter(p => p.id !== id);
     try { await sbDeleteShared(id); } catch (e) { console.warn('Failed to delete from server', e); }
     await saveShared();
@@ -1582,7 +1582,7 @@ async function deleteSharedPlaylist(id) {
 function likeSharedPlaylist(id) {
     const sp = sharedPlaylists.find(p => p.id === id);
     if (!sp) return;
-    if (!currentUser) { alert('로그?????�용?????�습?�다.'); return; }
+    if (!currentUser) { alert('로그인된 사용자가 없습니다.'); return; }
     if (sp.dislikedBy && sp.dislikedBy.includes(currentUser)) {
         sp.dislikes = Math.max(0, (sp.dislikes || 0) - 1);
         sp.dislikedBy = sp.dislikedBy.filter(u => u !== currentUser);
@@ -1603,7 +1603,7 @@ function likeSharedPlaylist(id) {
 function dislikeSharedPlaylist(id) {
     const sp = sharedPlaylists.find(p => p.id === id);
     if (!sp) return;
-    if (!currentUser) { alert('로그?????�용?????�습?�다.'); return; }
+    if (!currentUser) { alert('로그인된 사용자가 없습니다.'); return; }
     if (sp.likedBy && sp.likedBy.includes(currentUser)) {
         sp.likes = Math.max(0, (sp.likes || 0) - 1);
         sp.likedBy = sp.likedBy.filter(u => u !== currentUser);
@@ -1624,7 +1624,7 @@ function dislikeSharedPlaylist(id) {
 function addComment(id) {
     const sp = sharedPlaylists.find(p => p.id === id);
     if (!sp) return;
-    if (!currentUser) { alert('로그?????�용?????�습?�다.'); return; }
+    if (!currentUser) { alert('로그인된 사용자가 없습니다.'); return; }
     const input = document.getElementById('comm-' + id + '-input');
     const text = input.value.trim();
     if (!text) return;
@@ -1739,7 +1739,7 @@ async function saveProfile() {
     // Always save locally
     saveLocalProfile(profileViewUser, { display_name: dn, bio: bio });
     if (profileViewUser === currentUser) {
-        document.getElementById('user-display').textContent = dn + '??;
+        document.getElementById('user-display').textContent = dn + '님';
     }
     closeProfileModal();
 }
@@ -1798,7 +1798,7 @@ document.getElementById('profile-avatar-file').addEventListener('change', async 
 });
 
 async function heartProfile() {
-    if (!currentUser) { alert('로그?????�용?????�습?�다.'); return; }
+    if (!currentUser) { alert('로그인된 사용자가 없습니다.'); return; }
     // Try Supabase first
     let result = null;
     try { result = await sbHeartProfile(profileViewUser, currentUser); } catch (_) {}
@@ -1875,14 +1875,14 @@ async function applySharedPlaylist(id) {
         }
     }
 
-    if (added.length === 0) { alert('모든 곡이 ?��? ?�이브러리에 ?�습?�다.'); return; }
+    if (added.length === 0) { alert('모든 곡이 이미 라이브러리에 있습니다.'); return; }
 
     const pl = { id: uid(), name: sp.title + ' (공유)', songs: added.map(s => s.id) };
     playlists.push(pl);
     save();
     renderLibrary();
     renderPlaylists();
-    alert('?�레?�리?�트 "' + pl.name + '"가 ?�이브러리에 추�??�었?�니?? (' + added.length + '�?');
+    alert('플레이리스트 "' + pl.name + '"가 라이브러리에 추가되었습니다 (' + added.length + '곡)');
 }
 
 // Player
@@ -2027,7 +2027,7 @@ async function loadSong(index) {
                     currentBlobUrl = URL.createObjectURL(blob);
                     audio.src = currentBlobUrl;
                 } else {
-                    throw new Error('?�일??찾을 ???�습?�다');
+                    throw new Error('파일을 찾을 수 없습니다');
                 }
             } else {
                 try {
@@ -2035,7 +2035,7 @@ async function loadSong(index) {
                     audio.src = url;
                 } catch (e) {
                     console.warn('Failed to load Supabase file', e);
-                    throw new Error('?�일??불러?????�습?�다');
+                    throw new Error('파일을 불러올 수 없습니다');
                 }
             }
         } else if (song.fileId) {
@@ -2046,7 +2046,7 @@ async function loadSong(index) {
                 currentBlobUrl = URL.createObjectURL(blob);
                 audio.src = currentBlobUrl;
             } else {
-                throw new Error('?�일??찾을 ???�습?�다');
+                throw new Error('파일을 찾을 수 없습니다');
             }
         } else {
             audio.src = song.url;
@@ -2149,14 +2149,14 @@ function updatePlayerUI() {
         plLogoEl.style.display = 'none';
     }
 
-    document.getElementById('current-title').textContent = song ? song.title : '?�택???�래 ?�음';
+    document.getElementById('current-title').textContent = song ? song.title : '선택된 노래 없음';
     document.getElementById('current-artist').textContent = song ? song.artist : '';
     document.getElementById('current-playlist-name').textContent = pl ? pl.name : '';
 
     const nextEl = document.getElementById('next-up');
     if (queue.length > 1 && queueIndex < queue.length - 1) {
         const next = queue[queueIndex + 1];
-        nextEl.innerHTML = '?�음 �? <b>' + esc(next.title) + '</b> ??' + esc(next.artist);
+        nextEl.innerHTML = '다음 곡 <b>' + esc(next.title) + '</b> - ' + esc(next.artist);
     } else {
         nextEl.textContent = '';
     }
@@ -2171,7 +2171,7 @@ function updatePlayerUI() {
         lyricsContainer.style.display = 'none';
     }
 
-    document.getElementById('play-btn').textContent = isPlaying ? '?? : '??;
+    document.getElementById('play-btn').textContent = isPlaying ? '일시 정지' : '재생';
 
     if (song && audio.duration) {
         document.getElementById('total-time').textContent = formatTime(audio.duration);
@@ -2190,16 +2190,16 @@ function renderPlayer() {
         return;
     }
 
-    document.getElementById('queue-count').textContent = '(' + queue.length + '�?';
+    document.getElementById('queue-count').textContent = '(' + queue.length + '곡)';
     list.innerHTML = queue.map((s, i) =>
         '<li class="' + (i === queueIndex ? 'active' : '') + '" onclick="jumpTo(' + i + ')">' +
-            (s.logo ? '<img class="queue-logo" src="' + esc(s.logo) + '">' : '<div class="queue-logo-placeholder">??/div>') +
+            (s.logo ? '<img class="queue-logo" src="' + esc(s.logo) + '">' : '<div class="queue-logo-placeholder">></div>') +
             '<div class="song-info">' +
                 '<div class="title">' + esc(s.title) + '</div>' +
                 '<div class="artist">' + esc(s.artist) + '</div>' +
             '</div>' +
             '<span class="duration">' + (i === queueIndex && audio.duration ? formatTime(audio.duration) : '') + '</span>' +
-            '<button class="btn-small btn-danger" onclick="event.stopPropagation();removeFromQueue(' + i + ')" style="margin-left:4px">??/button>' +
+            '<button class="btn-small btn-danger" onclick="event.stopPropagation();removeFromQueue(' + i + ')" style="margin-left:4px">✕</button>' +
         '</li>'
     ).join('');
 
@@ -2207,7 +2207,7 @@ function renderPlayer() {
     const sel = document.getElementById('queue-add-select');
     if (sel) {
         const ids = new Set(queue.map(s => s.id));
-        sel.innerHTML = '<option value="">-- �??�택 --</option>' +
+        sel.innerHTML = '<option value="">-- 노래 선택 --</option>' +
             songs.filter(s => !ids.has(s.id)).map(s => '<option value="' + s.id + '">' + esc(s.title) + ' - ' + esc(s.artist) + '</option>').join('');
     }
 
@@ -2423,7 +2423,7 @@ async function showApp() {
         const profile = currentUser ? await getMappedProfile(currentUser) : null;
         if (profile) displayName = profile.displayName || currentUser;
     } catch (_) {}
-    document.getElementById('user-display').textContent = displayName + '??;
+    document.getElementById('user-display').textContent = displayName + '님';
     loadYouTubeAPI();
     applyUI();
     renderLibrary();
@@ -2444,18 +2444,18 @@ function showLogin() {
 // Auth functions
 async function registerUser(username, password) {
     document.getElementById('login-error').textContent = '';
-    if (username.length < 2) { document.getElementById('login-error').textContent = '?�용???�름?� 2???�상?�어???�니??'; return false; }
-    if (password.length < 4) { document.getElementById('login-error').textContent = '비�?번호??4???�상?�어???�니??'; return false; }
+    if (username.length < 2) { document.getElementById('login-error').textContent = '사용자 이름은 2자 이상이어야 합니다'; return false; }
+    if (password.length < 4) { document.getElementById('login-error').textContent = '비밀번호는 4자 이상이어야 합니다'; return false; }
 
     // Save locally first (instant)
     const users = JSON.parse(localStorage.getItem('pl_users')) || [];
     if (users.some(u => u.username === username)) {
-        document.getElementById('login-error').textContent = '?��? 존재?�는 ?�용?�입?�다.';
+        document.getElementById('login-error').textContent = '이미 존재하는 사용자입니다.';
         return false;
     }
     users.push({ username, password });
     localStorage.setItem('pl_users', JSON.stringify(users));
-    document.getElementById('login-error').textContent = '?�원가???�공! 로그?�해 주세??';
+    document.getElementById('login-error').textContent = '회원가입 성공! 로그인해 주세요';
     document.getElementById('login-error').style.color = 'var(--accent)';
 
     // Try Supabase in background
@@ -2482,14 +2482,14 @@ async function loginUser(username, password) {
     const match = users.find(u => u.username === username);
 
     if (match && match.password !== password) {
-        document.getElementById('login-error').textContent = '비�?번호가 ?�?�습?�다.';
+        document.getElementById('login-error').textContent = '비밀번호가 틀렸습니다.';
         return false;
     }
 
     // Check if user has existing data
     const hasUserSpecificData = localStorage.getItem('pl_songs2_' + username) !== null;
     if (!match && !hasUserSpecificData) {
-        document.getElementById('login-error').textContent = '존재?��? ?�는 ?�용?�입?�다. ?�원가?�해 주세??';
+        document.getElementById('login-error').textContent = '존재하지 않는 사용자입니다. 회원가입해 주세요';
         return false;
     }
 
@@ -2553,13 +2553,13 @@ async function handleLoginClick() {
     try {
         const username = document.getElementById('login-username').value.trim();
         const password = document.getElementById('login-password').value;
-        if (!username) { document.getElementById('login-error').textContent = '?�용???�름???�력?�세??'; loginInProgress = false; return; }
-        if (!password) { document.getElementById('login-error').textContent = '비�?번호�??�력?�세??'; loginInProgress = false; return; }
+        if (!username) { document.getElementById('login-error').textContent = '사용자 이름을 입력하세요'; loginInProgress = false; return; }
+        if (!password) { document.getElementById('login-error').textContent = '비밀번호를 입력하세요'; loginInProgress = false; return; }
         const ok = await loginUser(username, password);
         if (ok) showApp();
     } catch (e) {
         console.error('handleLoginClick error:', e);
-        document.getElementById('login-error').textContent = '?�류: ' + e.message;
+        document.getElementById('login-error').textContent = '오류: ' + e.message;
     }
     loginInProgress = false;
 }
@@ -2579,12 +2579,12 @@ async function handleRegisterClick() {
     try {
         const username = document.getElementById('login-username').value.trim();
         const password = document.getElementById('login-password').value;
-        if (!username) { document.getElementById('login-error').textContent = '?�용???�름???�력?�세??'; loginInProgress = false; return; }
-        if (!password) { document.getElementById('login-error').textContent = '비�?번호�??�력?�세??'; loginInProgress = false; return; }
+        if (!username) { document.getElementById('login-error').textContent = '사용자 이름을 입력하세요'; loginInProgress = false; return; }
+        if (!password) { document.getElementById('login-error').textContent = '비밀번호를 입력하세요'; loginInProgress = false; return; }
         await registerUser(username, password);
     } catch (e) {
         console.error('handleRegisterClick error:', e);
-        document.getElementById('login-error').textContent = '?�류: ' + e.message;
+        document.getElementById('login-error').textContent = '오류: ' + e.message;
     }
     loginInProgress = false;
 }
