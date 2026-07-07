@@ -139,7 +139,7 @@ function playlistToDb(p, userId) {
     return {
         id: p.id, user_id: userId,
         name: p.name, song_ids: p.song_ids || [],
-        created_at: p.createdAt || Date.now()
+        created_at: p.createdAt ? new Date(p.createdAt).toISOString() : new Date().toISOString()
     };
 }
 
@@ -188,7 +188,7 @@ function sharedToDb(item) {
         likes: item.likes || 0, dislikes: item.dislikes || 0,
         liked_by: item.likedBy || [], disliked_by: item.dislikedBy || [],
         comments: item.comments || [],
-        created_at: item.createdAt || Date.now()
+        created_at: item.createdAt ? new Date(item.createdAt).toISOString() : new Date().toISOString()
     };
 }
 
