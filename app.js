@@ -439,8 +439,13 @@ function resetUI() {
     applyUI();
 }
 
+function isImageFile(file) {
+    if (file.type.startsWith('image/')) return true;
+    const ext = file.name.split('.').pop().toLowerCase();
+    return ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg'].includes(ext);
+}
 function readImageFile(file, callback) {
-    if (!file || !file.type.startsWith('image/')) { alert('유효한 이미지 파일이 아닙니다.'); return; }
+    if (!file || !isImageFile(file)) { alert('유효한 이미지 파일이 아닙니다.'); return; }
     const reader = new FileReader();
     reader.onload = function() { callback(reader.result); };
     reader.readAsDataURL(file);
@@ -530,6 +535,9 @@ function migrateSharedPlaylists() {
         if (raw) existing = JSON.parse(raw);
         if (!Array.isArray(existing)) existing = [];
     } catch (_) { existing = []; }
+    // Filter out soft-deleted items (from previous deleteSharedPlaylist calls)
+    loadDeletedSharedIds();
+    existing = existing.filter(p => p && !deletedSharedIds.has(p.id));
     const seen = new Set(existing.map(p => p && p.id).filter(Boolean));
     let migrated = false;
     for (let i = 0; i < localStorage.length; i++) {
@@ -540,7 +548,7 @@ function migrateSharedPlaylists() {
                 if (raw) {
                     const data = JSON.parse(raw);
                     if (Array.isArray(data)) {
-                        data.forEach(p => { if (p && p.id && !seen.has(p.id)) { existing.push(p); seen.add(p.id); migrated = true; } });
+                        data.forEach(p => { if (p && p.id && !seen.has(p.id) && !deletedSharedIds.has(p.id)) { existing.push(p); seen.add(p.id); migrated = true; } });
                     }
                 }
             } catch (_) {}
@@ -715,7 +723,7 @@ function clearCreatePlLogo() {
 
 document.getElementById('create-pl-logo-file').addEventListener('change', function() {
     const file = this.files[0];
-    if (!file || !file.type.startsWith('image/')) { alert('유효한 이미지 파일이 아닙니다.'); return; }
+    if (!file || !isImageFile(file)) { alert('유효한 이미지 파일이 아닙니다.'); return; }
     const reader = new FileReader();
     reader.onload = function() {
         pendingCreatePlLogo = reader.result;
@@ -1101,7 +1109,7 @@ function clearEditLogo() {
 
 document.getElementById('edit-logo-file').addEventListener('change', function() {
     const file = this.files[0];
-    if (!file || !file.type.startsWith('image/')) { alert('유효한 이미지 파일이 아닙니다.'); return; }
+    if (!file || !isImageFile(file)) { alert('유효한 이미지 파일이 아닙니다.'); return; }
     const reader = new FileReader();
     reader.onload = function() {
         pendingEditLogo = reader.result;
@@ -1127,7 +1135,7 @@ if (editLogoDropZone) {
         e.stopPropagation();
         editLogoDropZone.classList.remove('drag-over');
         const file = e.dataTransfer.files[0];
-        if (!file || !file.type.startsWith('image/')) { alert('유효한 이미지 파일이 아닙니다.'); return; }
+        if (!file || !isImageFile(file)) { alert('유효한 이미지 파일이 아닙니다.'); return; }
         const reader = new FileReader();
         reader.onload = function() {
             pendingEditLogo = reader.result;
@@ -1245,7 +1253,7 @@ function clearEditPlLogo() {
 
 document.getElementById('edit-pl-logo-file').addEventListener('change', function() {
     const file = this.files[0];
-    if (!file || !file.type.startsWith('image/')) { alert('유효한 이미지 파일이 아닙니다.'); return; }
+    if (!file || !isImageFile(file)) { alert('유효한 이미지 파일이 아닙니다.'); return; }
     const reader = new FileReader();
     reader.onload = function() {
         pendingEditPlLogo = reader.result;
@@ -1270,7 +1278,7 @@ if (editPlLogoDropZone) {
         e.stopPropagation();
         editPlLogoDropZone.classList.remove('drag-over');
         const file = e.dataTransfer.files[0];
-        if (!file || !file.type.startsWith('image/')) { alert('유효한 이미지 파일이 아닙니다.'); return; }
+        if (!file || !isImageFile(file)) { alert('유효한 이미지 파일이 아닙니다.'); return; }
         const reader = new FileReader();
         reader.onload = function() {
             pendingEditPlLogo = reader.result;
@@ -1519,6 +1527,9 @@ function getDurationLabel(v) { return DURATION_LABELS[v] || v; }
 function renderSharedPlaylists() {
     const list = document.getElementById('shared-list');
     if (!list) return;
+
+    loadDeletedSharedIds();
+    sharedPlaylists = sharedPlaylists.filter(p => p && !deletedSharedIds.has(p.id));
 
     const filtered = sharedPlaylists.filter(sp => {
         if (sharedGenreFilter !== 'all' && sp.genre !== 'other' && sp.genre !== sharedGenreFilter) return false;
@@ -1827,7 +1838,7 @@ document.addEventListener('drop', async e => {
     e.preventDefault();
     e.stopPropagation();
     const file = e.dataTransfer.files[0];
-    if (!file || !file.type.startsWith('image/')) return;
+    if (!file || !isImageFile(file)) return;
     const reader = new FileReader();
     reader.onload = ev => {
         const url = ev.target.result;
