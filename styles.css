@@ -315,6 +315,21 @@ nav {
     align-items: center;
     transition: var(--transition);
     box-shadow: var(--shadow-sm);
+    gap: 8px;
+}
+
+.card .song-check-label {
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+.card .song-check-label input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    accent-color: var(--accent);
+    cursor: pointer;
 }
 
 .card:hover {
@@ -322,6 +337,19 @@ nav {
     border-color: rgba(108, 99, 255, 0.2);
     transform: translateY(-1px);
     box-shadow: 0 4px 16px rgba(108, 99, 255, 0.1);
+}
+
+#batch-add-playlist-btn {
+    background: rgba(108, 99, 255, 0.15);
+    border-color: rgba(108, 99, 255, 0.3);
+    font-size: 0.82rem;
+    white-space: nowrap;
+}
+
+#batch-add-playlist-btn:hover:not([disabled]) {
+    background: var(--accent);
+    color: #fff;
+    border-color: var(--accent);
 }
 
 .card .info {

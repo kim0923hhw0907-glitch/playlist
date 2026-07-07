@@ -63,6 +63,7 @@ let sharedPlaylists = [];
 let sharedGenreFilter = 'all';
 let sharedDurationFilter = 'all';
 let deletedSharedIds = new Set();
+let selectedSongIds = new Set();
 
 function userKey(base) {
     if (!currentUser || currentUser === '__legacy__') return base;
@@ -1006,8 +1007,20 @@ function renderLibrary() {
         list.innerHTML = '<div class="empty-state">' + (songs.length === 0 ? '저장된 노래가 없습니다. 새로 노래를 추가하거나 파일을 드래그하세요.' : (songSearchQuery ? '검색 결과가 없습니다.' : '선택한 아티스트의 노래가 없습니다.')) + '</div>';
         return;
     }
-    list.innerHTML = filtered.map(s =>
+    const hasChecked = selectedSongIds.size > 0;
+    list.innerHTML =
+        '<div class="library-toolbar" style="margin-bottom:10px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">' +
+            '<label style="display:flex;align-items:center;gap:4px;cursor:pointer;font-size:0.85rem;color:var(--text-secondary)">' +
+                '<input type="checkbox" id="select-all-songs" onchange="toggleSelectAll(this.checked)"' + (filtered.length > 0 && selectedSongIds.size === filtered.length ? ' checked' : '') + '> 전체 선택' +
+            '</label>' +
+            '<button class="btn-small" id="batch-add-playlist-btn" onclick="showBatchPlaylistPicker()"' + (hasChecked ? '' : ' disabled style="opacity:0.4"') + '>➕ 선택을 플리에 추가</button>' +
+            '<span style="font-size:0.82rem;color:var(--text-secondary)">' + (hasChecked ? selectedSongIds.size + '개 선택됨' : '') + '</span>' +
+        '</div>' +
+        filtered.map(s =>
         '<div class="card">' +
+            '<label class="song-check-label" onclick="event.stopPropagation()">' +
+                '<input type="checkbox" class="song-check" data-id="' + s.id + '" onchange="toggleSongSelect(\'' + s.id + '\')"' + (selectedSongIds.has(s.id) ? ' checked' : '') + '>' +
+            '</label>' +
             '<div class="info">' +
                 (s.logo
                     ? '<img class="song-logo" src="' + esc(s.logo) + '" draggable="false" data-id="' + s.id + '" data-type="song">'
@@ -1020,52 +1033,63 @@ function renderLibrary() {
             '<div class="actions">' +
                 '<button class="btn-small play-btn" onclick="playLibrarySong(\'' + s.id + '\')">재생</button>' +
                 '<button class="btn-small" onclick="editSong(\'' + s.id + '\')">수정</button>' +
-                '<span style="position:relative">' +
-                    '<button class="btn-small btn-add-playlist" onclick="event.stopPropagation();togglePlaylistPicker(\'' + s.id + '\', event)">+</button>' +
-                    '<div id="picker-' + s.id + '" class="playlist-picker" style="display:none"></div>' +
-                '</span>' +
                 '<button class="btn-danger" onclick="deleteSong(\'' + s.id + '\')">삭제</button>' +
             '</div>' +
         '</div>'
     ).join('');
 }
 
-function togglePlaylistPicker(songId, event) {
-    event.stopPropagation();
-    const picker = document.getElementById('picker-' + songId);
-    if (!picker) return;
-    if (picker.style.display === 'block') { picker.style.display = 'none'; return; }
-    // Close all other pickers first
-    document.querySelectorAll('.playlist-picker').forEach(p => p.style.display = 'none');
-    if (playlists.length === 0) {
-        picker.innerHTML = '<div class="picker-item" style="color:var(--text-secondary);cursor:default">플레이리스트가 없습니다</div>';
-    } else {
-        picker.innerHTML = playlists.map(pl =>
-            '<div class="picker-item" onclick="event.stopPropagation();addSongToPlaylistFromPicker(\'' + songId + '\',\'' + pl.id + '\')">' + esc(pl.name) + ' (' + pl.songs.length + '곡)</div>'
-        ).join('');
-    }
-    picker.style.display = 'block';
-    // Close on click outside
-    setTimeout(() => {
-        document.addEventListener('click', function closePicker(e) {
-            const p = document.getElementById('picker-' + songId);
-            if (p && !p.contains(e.target) && !e.target.closest('.btn-add-playlist')) {
-                p.style.display = 'none';
-            }
-            document.removeEventListener('click', closePicker);
-        }, { once: true });
-    }, 0);
+function toggleSongSelect(songId) {
+    if (selectedSongIds.has(songId)) selectedSongIds.delete(songId);
+    else selectedSongIds.add(songId);
+    renderLibrary();
 }
 
-function addSongToPlaylistFromPicker(songId, playlistId) {
+function toggleSelectAll(checked) {
+    const list = document.getElementById('song-list');
+    if (!list) return;
+    const ids = list.querySelectorAll('.song-check');
+    ids.forEach(cb => {
+        const id = cb.dataset.id;
+        if (checked) selectedSongIds.add(id);
+        else selectedSongIds.delete(id);
+    });
+    renderLibrary();
+}
+
+function showBatchPlaylistPicker() {
+    if (selectedSongIds.size === 0) return;
+    if (playlists.length === 0) { alert('플레이리스트가 없습니다. 먼저 플레이리스트를 만들어주세요.'); return; }
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay visible';
+    overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(15,15,26,0.9);z-index:2000;display:flex;justify-content:center;align-items:center';
+    overlay.innerHTML =
+        '<div class="modal-content" style="max-width:360px">' +
+            '<h3 style="margin:0 0 4px 0">선택한 노래 추가 (' + selectedSongIds.size + '곡)</h3>' +
+            '<p style="font-size:0.85rem;color:var(--text-secondary);margin:0 0 14px 0">플레이리스트를 선택하세요</p>' +
+            '<div style="max-height:260px;overflow-y:auto">' +
+                playlists.map(pl =>
+                    '<div class="picker-item" style="padding:10px 14px;border-bottom:1px solid rgba(255,255,255,0.06);cursor:pointer;font-size:0.9rem" onclick="addSelectedToPlaylist(\'' + pl.id + '\');this.closest(\'.modal-overlay\').remove()">' +
+                        esc(pl.name) + ' (' + pl.songs.length + '곡)' +
+                    '</div>'
+                ).join('') +
+            '</div>' +
+            '<button class="btn-small" style="margin-top:12px;width:100%" onclick="this.closest(\'.modal-overlay\').remove()">취소</button>' +
+        '</div>';
+    document.body.appendChild(overlay);
+}
+
+function addSelectedToPlaylist(playlistId) {
     const pl = getPlaylist(playlistId);
-    if (pl && !pl.songs.includes(songId)) {
-        pl.songs.push(songId);
-        save();
-        renderPlaylists();
-    }
-    // Close all pickers
-    document.querySelectorAll('.playlist-picker').forEach(p => p.style.display = 'none');
+    if (!pl) return;
+    let added = 0;
+    selectedSongIds.forEach(sid => {
+        if (!pl.songs.includes(sid)) { pl.songs.push(sid); added++; }
+    });
+    if (added > 0) { save(); renderPlaylists(); }
+    selectedSongIds.clear();
+    renderLibrary();
+    alert(added + '곡이 "' + pl.name + '"에 추가되었습니다.');
 }
 
 function onSongSearch() {
