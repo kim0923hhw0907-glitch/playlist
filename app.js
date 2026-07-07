@@ -989,7 +989,7 @@ if (editLogoDropZone) {
     });
 }
 
-document.getElementById('edit-form').addEventListener('submit', e => {
+document.getElementById('edit-form').addEventListener('submit', async e => {
     e.preventDefault();
     const song = getSong(editingSongId);
     if (!song) return;
@@ -2360,36 +2360,8 @@ async function registerUser(username, password) {
     document.getElementById('login-error').textContent = '';
     if (username.length < 2) { document.getElementById('login-error').textContent = '사용자 이름은 2자 이상이어야 합니다.'; return false; }
     if (password.length < 4) { document.getElementById('login-error').textContent = '비밀번호는 4자 이상이어야 합니다.'; return false; }
-    // Try Supabase first
-    if (sbConfigured) {
-        try {
-            const data = await sbRegister(username, password);
-            if (!data.user) {
-                if (!data.session && data.identities?.length === 0) {
-                    // email confirmation needed; save locally so user can still log in
-                    const users = JSON.parse(localStorage.getItem('pl_users')) || [];
-                    if (!users.some(u => u.username === username)) {
-                        users.push({ username, password });
-                        localStorage.setItem('pl_users', JSON.stringify(users));
-                    }
-                }
-                document.getElementById('login-error').textContent = '회원가입에 실패했습니다.';
-                return false;
-            }
-            // Registration succeeded – save local fallback credentials too
-            const users = JSON.parse(localStorage.getItem('pl_users')) || [];
-            if (!users.some(u => u.username === username)) {
-                users.push({ username, password });
-                localStorage.setItem('pl_users', JSON.stringify(users));
-            }
-            document.getElementById('login-error').textContent = '회원가입 성공! 로그인해 주세요.';
-            document.getElementById('login-error').style.color = 'var(--accent)';
-            return true;
-        } catch (e) {
-            console.warn('Supabase register failed, using local fallback', e);
-        }
-    }
-    // Fallback: save to localStorage
+
+    // Save locally first (instant)
     const users = JSON.parse(localStorage.getItem('pl_users')) || [];
     if (users.some(u => u.username === username)) {
         document.getElementById('login-error').textContent = '이미 존재하는 사용자입니다.';
@@ -2397,52 +2369,53 @@ async function registerUser(username, password) {
     }
     users.push({ username, password });
     localStorage.setItem('pl_users', JSON.stringify(users));
-    document.getElementById('login-error').textContent = '회원가입 성공 (로컬)! 로그인해 주세요.';
+    document.getElementById('login-error').textContent = '회원가입 성공! 로그인해 주세요.';
     document.getElementById('login-error').style.color = 'var(--accent)';
+
+    // Try Supabase in background
+    if (sbConfigured) {
+        sbRegister(username, password).then(data => {
+            if (data && data.user) {
+                const users2 = JSON.parse(localStorage.getItem('pl_users')) || [];
+                if (!users2.some(u => u.username === username)) {
+                    users2.push({ username, password });
+                    localStorage.setItem('pl_users', JSON.stringify(users2));
+                }
+            }
+        }).catch(e => console.warn('Supabase register background failed', e));
+    }
     return true;
 }
 
 async function loginUser(username, password) {
     console.log('loginUser called', username, sbConfigured, !!_supabase);
     document.getElementById('login-error').textContent = '';
-    // Try Supabase first
-    if (sbConfigured && _supabase) {
-        try {
-            const data = await sbLogin(username, password);
-            sbUser = data.user;
-            currentUser = data.user.user_metadata?.username || username;
-            localStorage.setItem(userKey('pl_session'), username);
-            localStorage.setItem('pl_last_user', username);
-            await loadUserData();
-            return true;
-        } catch (e) {
-            console.warn('Supabase login failed, trying local fallback', e);
-            document.getElementById('login-error').textContent = '서버 연결 실패, 로컬 로그인 시도...';
-        }
-    }
-    // Fallback: check localStorage for existing user data
+
+    // Try localStorage first (instant, no network)
     const users = JSON.parse(localStorage.getItem('pl_users')) || [];
     const match = users.find(u => u.username === username);
+
     if (match && match.password !== password) {
         document.getElementById('login-error').textContent = '비밀번호가 틀렸습니다.';
         return false;
     }
-    // Check all possible key formats for existing user data
-    const possibleKeys = ['pl_songs2_' + username, 'pl_songs2', 'pl_playlists2_' + username, 'pl_playlists2'];
-    const hasLocalData = possibleKeys.some(k => localStorage.getItem(k) !== null);
-    if (!match && !hasLocalData) {
+
+    // Check if user has existing data
+    const hasUserSpecificData = localStorage.getItem('pl_songs2_' + username) !== null;
+    if (!match && !hasUserSpecificData) {
         document.getElementById('login-error').textContent = '존재하지 않는 사용자입니다. 회원가입해 주세요.';
         return false;
     }
-    // Local login – no sbUser (no Supabase sync)
+
+    // Local login
     sbUser = null;
     currentUser = username;
     localStorage.setItem(userKey('pl_session'), username);
     localStorage.setItem('pl_last_user', username);
-    // Load from localStorage – try suffixed key first, then fall back to plain key
-    songs = JSON.parse(localStorage.getItem(userKey('pl_songs2'))) || JSON.parse(localStorage.getItem('pl_songs2') || '[]');
-    playlists = JSON.parse(localStorage.getItem(userKey('pl_playlists2'))) || JSON.parse(localStorage.getItem('pl_playlists2') || '[]');
-    sharedPlaylists = JSON.parse(localStorage.getItem(userKey('pl_shared'))) || JSON.parse(localStorage.getItem('pl_shared') || '[]');
+    // Load user-specific data (no cross-user fallback)
+    songs = JSON.parse(localStorage.getItem(userKey('pl_songs2'))) || [];
+    playlists = JSON.parse(localStorage.getItem(userKey('pl_playlists2'))) || [];
+    sharedPlaylists = JSON.parse(localStorage.getItem(userKey('pl_shared'))) || [];
     const savedUI = JSON.parse(localStorage.getItem(userKey('pl_ui')));
     if (savedUI) {
         uiSettings = savedUI;
@@ -2450,6 +2423,18 @@ async function loginUser(username, password) {
         uiSettings = { bgImages: [], bgMode: 'single', bgInterval: 10, bgIndex: 0, accent: '#6c63ff', blur: 10, dim: 50, playBtnImage: '' };
     }
     document.getElementById('login-error').textContent = '';
+
+    // Try Supabase sync in background (fast local response first)
+    if (sbConfigured && _supabase) {
+        sbLogin(username, password).then(data => {
+            if (data && data.user) {
+                sbUser = data.user;
+                currentUser = data.user.user_metadata?.username || username;
+                localStorage.setItem(userKey('pl_session'), username);
+                loadUserData();
+            }
+        }).catch(e => console.warn('Supabase background sync failed', e));
+    }
     return true;
 }
 
@@ -2473,18 +2458,24 @@ async function logoutUser() {
     showLogin();
 }
 
-// Expose login/register handlers globally (used by onclick attributes and addEventListener)
+// Expose login/register handlers globally (used by addEventListener)
+let loginInProgress = false;
+
 async function handleLoginClick() {
+    if (loginInProgress) return;
+    loginInProgress = true;
     try {
         const username = document.getElementById('login-username').value.trim();
         const password = document.getElementById('login-password').value;
-        console.log('Login clicked for:', username);
+        if (!username) { document.getElementById('login-error').textContent = '사용자 이름을 입력하세요.'; loginInProgress = false; return; }
+        if (!password) { document.getElementById('login-error').textContent = '비밀번호를 입력하세요.'; loginInProgress = false; return; }
         const ok = await loginUser(username, password);
         if (ok) showApp();
     } catch (e) {
         console.error('handleLoginClick error:', e);
         document.getElementById('login-error').textContent = '오류: ' + e.message;
     }
+    loginInProgress = false;
 }
 
 document.getElementById('login-btn').addEventListener('click', handleLoginClick);
@@ -2497,15 +2488,19 @@ document.getElementById('login-password').addEventListener('keydown', e => {
 });
 
 async function handleRegisterClick() {
+    if (loginInProgress) return;
+    loginInProgress = true;
     try {
         const username = document.getElementById('login-username').value.trim();
         const password = document.getElementById('login-password').value;
-        console.log('Register clicked for:', username);
+        if (!username) { document.getElementById('login-error').textContent = '사용자 이름을 입력하세요.'; loginInProgress = false; return; }
+        if (!password) { document.getElementById('login-error').textContent = '비밀번호를 입력하세요.'; loginInProgress = false; return; }
         await registerUser(username, password);
     } catch (e) {
         console.error('handleRegisterClick error:', e);
         document.getElementById('login-error').textContent = '오류: ' + e.message;
     }
+    loginInProgress = false;
 }
 
 document.getElementById('register-btn').addEventListener('click', handleRegisterClick);
@@ -2519,22 +2514,8 @@ document.getElementById('user-display').addEventListener('click', () => {
 // On page load, check session
 (async function init() {
     console.log('init() running, sbConfigured:', sbConfigured, '_supabase:', !!_supabase);
-    // Try Supabase session first
-    if (sbConfigured && _supabase) {
-        try {
-            const { data } = await sbGetSession();
-            if (data && data.session) {
-                sbUser = data.session.user;
-                currentUser = sbUser.user_metadata?.username || sbUser.email?.replace('@pl.local', '') || 'user';
-                await loadUserData();
-                showApp();
-                return;
-            }
-        } catch (e) {
-            console.warn('Supabase session check failed', e);
-        }
-    }
-    // Fallback: check localStorage session / users list / legacy data
+
+    // Check localStorage FIRST (instant, no network)
     try {
         const users = JSON.parse(localStorage.getItem('pl_users')) || [];
         const lastUser = localStorage.getItem('pl_last_user');
@@ -2545,12 +2526,23 @@ document.getElementById('user-display').addEventListener('click', () => {
             console.log('init(): found local user', effectiveUser);
             currentUser = effectiveUser;
             sbUser = null;
-            songs = JSON.parse(localStorage.getItem(userKey('pl_songs2'))) || JSON.parse(localStorage.getItem('pl_songs2') || '[]');
-            playlists = JSON.parse(localStorage.getItem(userKey('pl_playlists2'))) || JSON.parse(localStorage.getItem('pl_playlists2') || '[]');
-            sharedPlaylists = JSON.parse(localStorage.getItem(userKey('pl_shared'))) || JSON.parse(localStorage.getItem('pl_shared') || '[]');
-            const savedUI = JSON.parse(localStorage.getItem(userKey('pl_ui'))) || JSON.parse(localStorage.getItem('pl_ui') || 'null');
+            songs = JSON.parse(localStorage.getItem(userKey('pl_songs2'))) || [];
+            playlists = JSON.parse(localStorage.getItem(userKey('pl_playlists2'))) || [];
+            sharedPlaylists = JSON.parse(localStorage.getItem(userKey('pl_shared'))) || [];
+            const savedUI = JSON.parse(localStorage.getItem(userKey('pl_ui')));
             if (savedUI) uiSettings = savedUI;
             showApp();
+
+            // Try Supabase session sync in background
+            if (sbConfigured && _supabase) {
+                sbGetSession().then(({ data }) => {
+                    if (data && data.session) {
+                        sbUser = data.session.user;
+                        currentUser = sbUser.user_metadata?.username || effectiveUser;
+                        loadUserData().catch(() => {});
+                    }
+                }).catch(e => console.warn('Supabase background session check failed', e));
+            }
             return;
         }
     } catch (e) {
