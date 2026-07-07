@@ -799,18 +799,25 @@ document.addEventListener('keydown', e => {
 const libSection = document.getElementById('library');
 const dropOverlay = document.getElementById('drop-overlay');
 
+function isLogoDropTarget(el) {
+    return el && el.closest('.song-logo, .song-logo-placeholder, .playlist-logo, .playlist-logo-placeholder');
+}
+
 libSection.addEventListener('dragenter', e => {
+    if (isLogoDropTarget(e.target)) return;
     e.preventDefault();
     e.stopPropagation();
     dropOverlay.classList.add('visible');
 });
 
 libSection.addEventListener('dragover', e => {
+    if (isLogoDropTarget(e.target)) return;
     e.preventDefault();
     e.stopPropagation();
 });
 
 libSection.addEventListener('dragleave', e => {
+    if (isLogoDropTarget(e.target)) return;
     e.preventDefault();
     e.stopPropagation();
     const rect = libSection.getBoundingClientRect();
@@ -821,6 +828,7 @@ libSection.addEventListener('dragleave', e => {
 });
 
 libSection.addEventListener('drop', async e => {
+    if (isLogoDropTarget(e.target)) return;
     e.preventDefault();
     e.stopPropagation();
     dropOverlay.classList.remove('visible');
