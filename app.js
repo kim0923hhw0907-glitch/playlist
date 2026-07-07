@@ -1558,6 +1558,12 @@ async function importSharedPlaylist() {
 }
 
 async function deleteSharedPlaylist(id) {
+    const sp = sharedPlaylists.find(p => p.id === id);
+    if (!sp) return;
+    if (sp.sharedBy && sp.sharedBy !== currentUser) {
+        alert('자신이 공유한 플레이리스트만 삭제할 수 있습니다.');
+        return;
+    }
     if (!confirm('이 공유 플레이리스트를 삭제하시겠습니까?')) return;
     sharedPlaylists = sharedPlaylists.filter(p => p.id !== id);
     try { await sbDeleteShared(id); } catch (e) { console.warn('Failed to delete from server', e); }
