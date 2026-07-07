@@ -588,6 +588,10 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
                 startVisualizer();
             }
         } else if (btn.dataset.tab === 'community') {
+            stopVisualizer();
+            stopYtTimer();
+            hideVideoDisplay();
+            hideMiniPlayer();
             renderCommunity();
         } else {
             stopVisualizer();
@@ -1633,13 +1637,23 @@ let profileViewUser = null;
 
 const defaultProfile = { display_name: '', bio: '', avatar_url: '', banner_url: '', hearts: 0, hearted_by: [] };
 
+function getLocalProfiles() {
+    try { return JSON.parse(localStorage.getItem('pl_profiles')) || {}; } catch (_) { return {}; }
+}
+function saveLocalProfile(username, data) {
+    const all = getLocalProfiles();
+    all[username] = { ...all[username], ...data };
+    localStorage.setItem('pl_profiles', JSON.stringify(all));
+}
+
 async function loadProfile(username) {
-    try {
-        const data = await sbLoadProfile(username);
-        return data || { ...defaultProfile, username };
-    } catch (_) {
-        return { ...defaultProfile, username };
+    let data = null;
+    try { data = await sbLoadProfile(username); } catch (_) {}
+    if (!data) {
+        const local = getLocalProfiles();
+        data = local[username] || null;
     }
+    return data || { ...defaultProfile, username };
 }
 
 async function getMappedProfile(username) {
@@ -1708,57 +1722,103 @@ function toggleProfileEdit() {
 }
 
 async function saveProfile() {
-    if (!sbUser) return;
     const dn = document.getElementById('profile-edit-name').value.trim() || profileViewUser;
     const bio = document.getElementById('profile-edit-bio').value.trim();
-    try {
-        await sbUpsertProfile({ id: sbUser.id, username: profileViewUser, display_name: dn, bio: bio });
-        if (profileViewUser === currentUser) {
-            document.getElementById('user-display').textContent = dn + '님';
+    // Save to Supabase if available
+    if (sbUser) {
+        try {
+            await sbUpsertProfile({ id: sbUser.id, username: profileViewUser, display_name: dn, bio: bio });
+        } catch (e) {
+            console.warn('Failed to save profile to server', e);
         }
-    } catch (e) {
-        console.warn('Failed to save profile', e);
+    }
+    // Always save locally
+    saveLocalProfile(profileViewUser, { display_name: dn, bio: bio });
+    if (profileViewUser === currentUser) {
+        document.getElementById('user-display').textContent = dn + '님';
     }
     closeProfileModal();
 }
 
-// Banner/avatar file handling - upload to Supabase Storage
+// Banner/avatar file handling
 document.getElementById('profile-banner-file').addEventListener('change', async function() {
     const file = this.files[0];
-    if (!file || !sbUser) return;
-    try {
-        const url = await sbUploadProfileFile(sbUser.id, 'banner', file);
-        await sbUpsertProfile({ id: sbUser.id, username: profileViewUser, banner_url: url });
-        document.getElementById('profile-banner-img').style.backgroundImage = 'url(' + url + ')';
-    } catch (e) {
-        console.warn('Banner upload failed', e);
+    if (!file) return;
+    // Try Supabase upload
+    if (sbUser) {
+        try {
+            const url = await sbUploadProfileFile(sbUser.id, 'banner', file);
+            await sbUpsertProfile({ id: sbUser.id, username: profileViewUser, banner_url: url });
+            document.getElementById('profile-banner-img').style.backgroundImage = 'url(' + url + ')';
+            saveLocalProfile(profileViewUser, { banner_url: url });
+            return;
+        } catch (e) {
+            console.warn('Banner upload failed, falling back to local', e);
+        }
     }
+    // Local fallback: read as data URL
+    const reader = new FileReader();
+    reader.onload = function() {
+        const dataUrl = reader.result;
+        document.getElementById('profile-banner-img').style.backgroundImage = 'url(' + dataUrl + ')';
+        saveLocalProfile(profileViewUser, { banner_url: dataUrl });
+    };
+    reader.readAsDataURL(file);
 });
 
 document.getElementById('profile-avatar-file').addEventListener('change', async function() {
     const file = this.files[0];
-    if (!file || !sbUser) return;
-    try {
-        const url = await sbUploadProfileFile(sbUser.id, 'avatar', file);
-        await sbUpsertProfile({ id: sbUser.id, username: profileViewUser, avatar_url: url });
-        document.getElementById('profile-avatar').src = url;
-        document.getElementById('profile-avatar').style.display = 'block';
-    } catch (e) {
-        console.warn('Avatar upload failed', e);
+    if (!file) return;
+    // Try Supabase upload
+    if (sbUser) {
+        try {
+            const url = await sbUploadProfileFile(sbUser.id, 'avatar', file);
+            await sbUpsertProfile({ id: sbUser.id, username: profileViewUser, avatar_url: url });
+            document.getElementById('profile-avatar').src = url;
+            document.getElementById('profile-avatar').style.display = 'block';
+            saveLocalProfile(profileViewUser, { avatar_url: url });
+            return;
+        } catch (e) {
+            console.warn('Avatar upload failed, falling back to local', e);
+        }
     }
+    // Local fallback: read as data URL
+    const reader = new FileReader();
+    reader.onload = function() {
+        const dataUrl = reader.result;
+        document.getElementById('profile-avatar').src = dataUrl;
+        document.getElementById('profile-avatar').style.display = 'block';
+        saveLocalProfile(profileViewUser, { avatar_url: dataUrl });
+    };
+    reader.readAsDataURL(file);
 });
 
 async function heartProfile() {
     if (!currentUser) { alert('로그인 후 이용할 수 있습니다.'); return; }
-    try {
-        const result = await sbHeartProfile(profileViewUser, currentUser);
-        if (result) {
-            document.getElementById('profile-heart-count').textContent = result.hearts;
-            document.getElementById('profile-heart-btn').classList.toggle('active');
-        }
-    } catch (e) {
-        console.warn('Heart failed', e);
+    // Try Supabase first
+    let result = null;
+    try { result = await sbHeartProfile(profileViewUser, currentUser); } catch (_) {}
+    if (result) {
+        document.getElementById('profile-heart-count').textContent = result.hearts;
+        document.getElementById('profile-heart-btn').classList.toggle('active');
+        saveLocalProfile(profileViewUser, { hearts: result.hearts, hearted_by: result.hearted_by || [] });
+        return;
     }
+    // Local fallback
+    const local = getLocalProfiles();
+    const p = local[profileViewUser] || {};
+    let hearts = p.hearts || 0;
+    let heartedBy = p.hearted_by || [];
+    if (heartedBy.includes(currentUser)) {
+        hearts = Math.max(0, hearts - 1);
+        heartedBy = heartedBy.filter(u => u !== currentUser);
+    } else {
+        hearts++;
+        heartedBy.push(currentUser);
+    }
+    saveLocalProfile(profileViewUser, { hearts, hearted_by: heartedBy });
+    document.getElementById('profile-heart-count').textContent = hearts;
+    document.getElementById('profile-heart-btn').classList.toggle('active');
 }
 
 async function applySharedPlaylist(id) {
@@ -2273,7 +2333,7 @@ function startVisualizer() {
     const smooth = new Float32Array(barCount);
     canvas.classList.add('show');
 
-    // Logarithmic frequency distribution
+    // Cache logarithmic frequency bin ranges (computed once)
     const binRanges = [];
     const logMin = Math.log(1);
     const logMax = Math.log(bufferLength);
@@ -2285,20 +2345,28 @@ function startVisualizer() {
         binRanges.push({ start: startBin, end: endBin, count: Math.max(1, endBin - startBin) });
     }
 
+    // Parse accent color once
     const accent = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#6c63ff';
     const ar = parseInt(accent.slice(1,3), 16) || 108;
     const ag = parseInt(accent.slice(3,5), 16) || 99;
     const ab = parseInt(accent.slice(5,7), 16) || 255;
+    const brightR = Math.min(255, ar + 60);
+    const brightG = Math.min(255, ag + 60);
+    const brightB = Math.min(255, ab + 60);
+
+    const barW = w / barCount;
+    const gap = barW * 0.15;
+    const halfGap = gap / 2;
+    const centerY = h / 2;
 
     function draw() {
         vizAnimId = requestAnimationFrame(draw);
         analyser.getByteFrequencyData(dataArray);
         ctx.clearRect(0, 0, w, h);
 
-        const barW = w / barCount;
-        const gap = barW * 0.15;
-        const radius = Math.min(4, (barW - gap) / 2);
-        const centerY = h / 2;
+        // Set shadow once for all bars
+        ctx.shadowColor = `rgba(${ar},${ag},${ab},0.3)`;
+        ctx.shadowBlur = 6;
 
         for (let i = 0; i < barCount; i++) {
             const range = binRanges[i];
@@ -2307,41 +2375,24 @@ function startVisualizer() {
                 sum += dataArray[j] || 0;
             }
             const raw = sum / range.count / 255;
-            smooth[i] += (raw - smooth[i]) * 0.35;
+            smooth[i] += (raw - smooth[i]) * 0.3;
             const v = smooth[i];
-            const barH = Math.max(v * h * 0.9, 1);
-            const halfH = barH / 2;
-            const x = i * barW + gap / 2;
+            const barH = Math.max(v * h * 0.9, 2);
+            const halfH = barH * 0.5;
+
+            const x = i * barW + halfGap;
             const bw = barW - gap;
             const top = centerY - halfH;
-            const bot = centerY + halfH;
 
-            const alpha = 0.3 + v * 0.7;
-            const brightR = Math.min(255, ar + 60);
-            const brightG = Math.min(255, ag + 60);
-            const brightB = Math.min(255, ab + 60);
+            const alpha = 0.35 + v * 0.65;
 
-            const grad = ctx.createLinearGradient(x, top, x, bot);
-            grad.addColorStop(0, `rgba(${brightR},${brightG},${brightB},${alpha})`);
-            grad.addColorStop(1, `rgba(${ar},${ag},${ab},${alpha * 0.6})`);
+            // Single color fill (avoids per-bar gradient creation)
+            const r = Math.round(brightR * alpha + ar * (1 - alpha));
+            const g = Math.round(brightG * alpha + ag * (1 - alpha));
+            const b = Math.round(brightB * alpha + ab * (1 - alpha));
+            ctx.fillStyle = `rgb(${r},${g},${b})`;
 
-            ctx.shadowColor = `rgba(${ar},${ag},${ab},${v * 0.5})`;
-            ctx.shadowBlur = 8;
-
-            ctx.beginPath();
-            ctx.moveTo(x + radius, top);
-            ctx.lineTo(x + bw - radius, top);
-            ctx.quadraticCurveTo(x + bw, top, x + bw, top + radius);
-            ctx.lineTo(x + bw, bot - radius);
-            ctx.quadraticCurveTo(x + bw, bot, x + bw - radius, bot);
-            ctx.lineTo(x + radius, bot);
-            ctx.quadraticCurveTo(x, bot, x, bot - radius);
-            ctx.lineTo(x, top + radius);
-            ctx.quadraticCurveTo(x, top, x + radius, top);
-            ctx.closePath();
-
-            ctx.fillStyle = grad;
-            ctx.fill();
+            ctx.fillRect(x, top, bw, barH);
         }
         ctx.shadowBlur = 0;
     }
