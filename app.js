@@ -474,28 +474,42 @@ async function save() {
 }
 
 function migrateSharedPlaylists() {
-    // Merge any per-user pl_shared_* data into the global pl_shared (one-time migration)
-    const existing = JSON.parse(localStorage.getItem('pl_shared')) || [];
-    const seen = new Set(existing.map(p => p.id));
+    let existing = [];
+    try {
+        const raw = localStorage.getItem('pl_shared');
+        if (raw) existing = JSON.parse(raw);
+        if (!Array.isArray(existing)) existing = [];
+    } catch (_) { existing = []; }
+    const seen = new Set(existing.map(p => p && p.id).filter(Boolean));
     let migrated = false;
     for (let i = 0; i < localStorage.length; i++) {
         const key = localStorage.key(i);
         if (key && key.startsWith('pl_shared_') && key !== 'pl_shared') {
             try {
-                const data = JSON.parse(localStorage.getItem(key)) || [];
-                data.forEach(p => { if (!seen.has(p.id)) { existing.push(p); seen.add(p.id); migrated = true; } });
+                const raw = localStorage.getItem(key);
+                if (raw) {
+                    const data = JSON.parse(raw);
+                    if (Array.isArray(data)) {
+                        data.forEach(p => { if (p && p.id && !seen.has(p.id)) { existing.push(p); seen.add(p.id); migrated = true; } });
+                    }
+                }
             } catch (_) {}
             localStorage.removeItem(key);
         }
     }
-    if (migrated) localStorage.setItem('pl_shared', JSON.stringify(existing));
+    if (migrated) {
+        try { localStorage.setItem('pl_shared', JSON.stringify(existing)); } catch (_) {}
+    }
     return existing;
 }
 
 async function saveShared() {
     try {
+        if (!Array.isArray(sharedPlaylists)) sharedPlaylists = [];
         localStorage.setItem('pl_shared', JSON.stringify(sharedPlaylists));
-    } catch (_) {}
+    } catch (_) {
+        console.warn('saveShared: localStorage write failed (quota?)');
+    }
 }
 
 function uid() {
@@ -1488,14 +1502,16 @@ function setSharedDurationFilter(d) {
         };
         if (pl.logo) shared.logo = pl.logo;
         sharedPlaylists.unshift(shared);
-        try { await sbAddShared(shared); } catch (e) { console.warn('Failed to share to server', e); }
+        let sbOk = false;
+        try { await sbAddShared(shared); sbOk = true; } catch (e) { console.warn('Failed to share to server', e); }
         await saveShared();
         renderSharedPlaylists();
         form.reset();
         document.getElementById('share-genre-custom').style.display = 'none';
         document.getElementById('share-duration-custom').style.display = 'none';
         const fileCount = songData.filter(s => s.fileData || s.fileRef).length;
-        alert('플레이리스트가 공유되었습니다 (' + fileCount + '개 파일 포함)');
+        const sbMsg = sbOk ? '' : ' (서버 저장 실패 — 같은 브라우저에서만 보입니다)';
+        alert('플레이리스트가 공유되었습니다 (' + fileCount + '개 파일 포함)' + sbMsg);
     });
 
     // Toggle custom inputs
