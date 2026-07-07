@@ -799,25 +799,18 @@ document.addEventListener('keydown', e => {
 const libSection = document.getElementById('library');
 const dropOverlay = document.getElementById('drop-overlay');
 
-function isLogoDropTarget(el) {
-    return el && el.closest('.song-logo, .song-logo-placeholder, .playlist-logo, .playlist-logo-placeholder');
-}
-
 libSection.addEventListener('dragenter', e => {
-    if (isLogoDropTarget(e.target)) return;
     e.preventDefault();
     e.stopPropagation();
     dropOverlay.classList.add('visible');
 });
 
 libSection.addEventListener('dragover', e => {
-    if (isLogoDropTarget(e.target)) return;
     e.preventDefault();
     e.stopPropagation();
 });
 
 libSection.addEventListener('dragleave', e => {
-    if (isLogoDropTarget(e.target)) return;
     e.preventDefault();
     e.stopPropagation();
     const rect = libSection.getBoundingClientRect();
@@ -828,7 +821,6 @@ libSection.addEventListener('dragleave', e => {
 });
 
 libSection.addEventListener('drop', async e => {
-    if (isLogoDropTarget(e.target)) return;
     e.preventDefault();
     e.stopPropagation();
     dropOverlay.classList.remove('visible');
@@ -1824,15 +1816,16 @@ function saveDeletedSharedIds() {
     try { localStorage.setItem('pl_deleted_shared', JSON.stringify([...deletedSharedIds])); } catch (_) {}
 }
 
-// Drag-and-drop logo for songs and playlists
+// Drag-and-drop logo for songs and playlists (use capture phase to intercept before library handler)
 document.addEventListener('dragover', e => {
     const logo = e.target.closest('.song-logo, .song-logo-placeholder, .playlist-logo, .playlist-logo-placeholder');
-    if (logo) { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; }
-});
+    if (logo) { e.preventDefault(); e.stopPropagation(); e.dataTransfer.dropEffect = 'copy'; }
+}, true);
 document.addEventListener('drop', async e => {
     const logo = e.target.closest('.song-logo, .song-logo-placeholder, .playlist-logo, .playlist-logo-placeholder');
     if (!logo) return;
     e.preventDefault();
+    e.stopPropagation();
     const file = e.dataTransfer.files[0];
     if (!file || !file.type.startsWith('image/')) return;
     const reader = new FileReader();
@@ -1849,7 +1842,7 @@ document.addEventListener('drop', async e => {
         }
     };
     reader.readAsDataURL(file);
-});
+}, true);
 
 async function deleteSharedPlaylist(id) {
     const sp = sharedPlaylists.find(p => p.id === id);

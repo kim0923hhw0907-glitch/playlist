@@ -1107,6 +1107,7 @@ nav {
 
 .drop-overlay.visible {
     display: flex;
+    pointer-events: none;
 }
 
 .drop-content {
