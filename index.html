@@ -49,6 +49,7 @@
                 <div class="section-header">
                     <h2>노래 라이브러리</h2>
                 </div>
+                <div class="search-bar"><input type="text" id="song-search" placeholder="노래 제목 검색..." oninput="onSongSearch()"></div>
                 <div id="filter-bar" class="filter-bar"></div>
                 <form id="add-song-form" class="add-form">
                     <input type="text" id="song-title" placeholder="노래 제목" required>
@@ -387,7 +388,7 @@
     </div>
 
     <div id="video-storage" style="position:absolute;top:-9999px;left:-9999px;width:1px;height:1px;opacity:0.01;pointer-events:none">
-        <video id="video-player" playsinline></video>
+        <video id="video-player" crossorigin="anonymous" playsinline></video>
     </div>
     <div id="audio-storage" style="position:absolute;top:-9999px;left:-9999px;width:1px;height:1px;opacity:0.01;pointer-events:none">
         <audio id="audio-player"></audio>

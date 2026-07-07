@@ -491,6 +491,30 @@ nav {
 }
 
 /* Artist filter */
+.search-bar {
+    margin-bottom: 12px;
+}
+.search-bar input {
+    width: 100%;
+    padding: 11px 14px;
+    border: 1px solid var(--glass-border);
+    border-radius: 10px;
+    background: rgba(255,255,255,0.04);
+    color: var(--text-primary);
+    font-size: 0.92rem;
+    transition: var(--transition);
+    box-sizing: border-box;
+}
+.search-bar input:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-glow);
+    background: rgba(255,255,255,0.06);
+}
+.search-bar input::placeholder {
+    color: #555;
+}
+
 .filter-bar {
     display: flex;
     gap: 6px;

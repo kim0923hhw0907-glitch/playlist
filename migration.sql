@@ -25,6 +25,9 @@ create policy "Users can insert their own profile"
 create policy "Users can update their own profile"
   on public.profiles for update using (auth.uid() = id);
 
+create policy "Authenticated users can heart any profile"
+  on public.profiles for update using (auth.role() = 'authenticated');
+
 -- 2. Songs table
 create table if not exists public.songs (
   id text primary key,

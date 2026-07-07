@@ -53,6 +53,7 @@ let currentPlaylistId = null;
 let isPlaying = false;
 let expandedPlaylistId = null;
 let selectedArtist = 'all';
+let songSearchQuery = '';
 let currentBlobUrl = null;
 let editingSongId = null;
 let pendingEditFile = null;
@@ -940,11 +941,15 @@ function renderLibrary() {
     filter.innerHTML = '<button class="chip' + (selectedArtist === 'all' ? ' active' : '') + '" data-filter="all">전체</button>' +
         artists.map(a => '<button class="chip' + (selectedArtist === a ? ' active' : '') + '" data-filter="' + esc(a).replace(/'/g, '&#39;') + '">' + esc(a) + '</button>').join('');
 
-    const filtered = selectedArtist === 'all' ? songs : songs.filter(s => s.artist === selectedArtist);
+    let filtered = selectedArtist === 'all' ? songs : songs.filter(s => s.artist === selectedArtist);
+    if (songSearchQuery) {
+        const q = songSearchQuery.toLowerCase();
+        filtered = filtered.filter(s => s.title.toLowerCase().includes(q));
+    }
 
     const list = document.getElementById('song-list');
     if (filtered.length === 0) {
-        list.innerHTML = '<div class="empty-state">' + (songs.length === 0 ? '저장된 노래가 없습니다. 새로 노래를 추가하거나 파일을 드래그하세요.' : '선택한 아티스트의 노래가 없습니다.') + '</div>';
+        list.innerHTML = '<div class="empty-state">' + (songs.length === 0 ? '저장된 노래가 없습니다. 새로 노래를 추가하거나 파일을 드래그하세요.' : (songSearchQuery ? '검색 결과가 없습니다.' : '선택한 아티스트의 노래가 없습니다.')) + '</div>';
         return;
     }
     list.innerHTML = filtered.map(s =>
@@ -965,6 +970,11 @@ function renderLibrary() {
             '</div>' +
         '</div>'
     ).join('');
+}
+
+function onSongSearch() {
+    songSearchQuery = document.getElementById('song-search').value;
+    renderLibrary();
 }
 
 // Edit song
@@ -1368,10 +1378,27 @@ async function renderCommunity() {
     } else {
         console.log('renderCommunity: _supabase is null, using local only');
     }
-    // Merge: server data overwrites local, local-only entries preserved
+    // Merge: combine server data (authoritative) with local updates (likes/comments)
     const map = new Map();
-    (sharedPlaylists || []).forEach(p => { if (p) map.set(p.id, p); });
     serverData.forEach(p => { if (p) map.set(p.id, p); });
+    (sharedPlaylists || []).forEach(p => {
+        if (!p) return;
+        const existing = map.get(p.id);
+        if (existing) {
+            existing.likes = Math.max(existing.likes || 0, p.likes || 0);
+            existing.dislikes = Math.max(existing.dislikes || 0, p.dislikes || 0);
+            existing.likedBy = [...new Set([...(existing.likedBy || []), ...(p.likedBy || [])])];
+            existing.dislikedBy = [...new Set([...(existing.dislikedBy || []), ...(p.dislikedBy || [])])];
+            const seen = new Map();
+            [...(existing.comments || []), ...(p.comments || [])].forEach(c => {
+                const key = c.author + '|' + c.text + '|' + (c.createdAt || '');
+                if (!seen.has(key)) seen.set(key, c);
+            });
+            existing.comments = Array.from(seen.values());
+        } else {
+            map.set(p.id, p);
+        }
+    });
     sharedPlaylists = Array.from(map.values());
     console.log('renderCommunity: merged list has ' + sharedPlaylists.length + ' playlists');
     saveShared();
@@ -2110,6 +2137,9 @@ async function loadSong(index) {
         // Init AudioContext within user gesture before playing
         initVisualizer();
         if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+
+        // Set crossOrigin for cross-origin audio sources (Supabase Storage)
+        audio.crossOrigin = song.isLocal || song.fileId || song.fileRef ? null : 'anonymous';
 
         if (song.isLocal && song.filePath) {
             if (song.filePath.startsWith('idxdb:')) {
