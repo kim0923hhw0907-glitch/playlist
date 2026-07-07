@@ -187,7 +187,7 @@ function sharedToDb(item) {
         likes: item.likes || 0, dislikes: item.dislikes || 0,
         liked_by: item.likedBy || [], disliked_by: item.dislikedBy || [],
         comments: item.comments || [],
-        deleted: item.deleted || false
+        created_at: item.createdAt || Date.now()
     };
 }
 
@@ -203,8 +203,7 @@ function sharedFromDb(item) {
         likes: item.likes || 0, dislikes: item.dislikes || 0,
         likedBy: item.liked_by || [], dislikedBy: item.disliked_by || [],
         comments: typeof item.comments === 'string' ? JSON.parse(item.comments) : (item.comments || []),
-        createdAt: item.created_at || Date.now(),
-        deleted: item.deleted || false
+        createdAt: item.created_at || Date.now()
     };
 }
 
@@ -213,7 +212,11 @@ async function sbLoadShared() {
     const { data, error } = await _supabase.from('shared_playlists').select('*').order('created_at', { ascending: false });
     if (error) { console.warn('sbLoadShared error:', error); return []; }
     if (!data || data.length === 0) { console.log('sbLoadShared: no shared playlists found'); return []; }
-    return data.map(sharedFromDb);
+    const result = [];
+    for (const item of data) {
+        try { result.push(sharedFromDb(item)); } catch (e) { console.warn('Skipping malformed shared playlist', item.id, e); }
+    }
+    return result;
 }
 
 async function sbAddShared(item) {
@@ -248,7 +251,8 @@ async function sbUpdateShared(id, updates) {
 
 async function sbDeleteShared(id) {
     if (!_supabase) return;
-    await _supabase.from('shared_playlists').update({ deleted: true }).eq('id', id);
+    const { error } = await _supabase.from('shared_playlists').delete().eq('id', id);
+    if (error) throw new Error(error.message);
 }
 
 // ─── Files (Supabase Storage) ───

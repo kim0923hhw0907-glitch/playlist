@@ -132,15 +132,7 @@ async function loadUserData() {
         const map = new Map(localShared.map(p => [p.id, p]));
         const serverData = await sbLoadShared();
         serverData.forEach(p => {
-            if (!p) return;
-            if (p.deleted) {
-                // Soft-deleted: remove from local and track
-                map.delete(p.id);
-                deletedSharedIds.add(p.id);
-                saveDeletedSharedIds();
-                return;
-            }
-            if (deletedSharedIds.has(p.id)) return;
+            if (!p || deletedSharedIds.has(p.id)) return;
             const existing = map.get(p.id);
             if (existing) {
                 existing.likes = Math.max(existing.likes || 0, p.likes || 0);
@@ -1519,20 +1511,9 @@ async function renderCommunity() {
     } else {
         console.log('renderCommunity: _supabase is null, using local only');
     }
-    // Handle soft-deleted playlists from server
+    // Filter out locally deleted playlists
     loadDeletedSharedIds();
-    const filteredServerData = [];
-    serverData.forEach(p => {
-        if (!p) return;
-        if (p.deleted) {
-            deletedSharedIds.add(p.id);
-            saveDeletedSharedIds();
-            // Also remove from current local sharedPlaylists
-            sharedPlaylists = sharedPlaylists.filter(lp => lp.id !== p.id);
-            return;
-        }
-        if (!deletedSharedIds.has(p.id)) filteredServerData.push(p);
-    });
+    const filteredServerData = serverData.filter(p => p && !deletedSharedIds.has(p.id));
     // Merge: combine server data (authoritative) with local updates (likes/comments)
     const map = new Map();
     filteredServerData.forEach(p => { if (p) map.set(p.id, p); });
@@ -1676,10 +1657,10 @@ function queueSharedSong(playlistId, songIndex) {
         title: ss.title,
         artist: ss.artist,
         url: ss.url || '',
-        isLocal: false,
-        filePath: '',
+        isLocal: ss.isLocal || false,
+        filePath: ss.filePath || '',
         fileId: null,
-        fileRef: null
+        fileRef: ss.fileRef || null
     }];
     queueIndex = 0;
     currentPlaylistId = null;
@@ -1707,7 +1688,7 @@ function queueSharedSong(playlistId, songIndex) {
         const durationCustom = duration === 'other' ? document.getElementById('share-duration-custom').value.trim() : '';
         if (duration === 'other' && !durationCustom) { alert('길이를 직접 입력하세요'); return; }
 
-        // Build song data — store file data in IndexedDB, keep only ref in shared playlist
+        // Build song data — upload files to server for cross-device playback
         const songData = [];
         for (const s of songsList) {
             const entry = { title: s.title, artist: s.artist, url: s.url };
@@ -1722,6 +1703,7 @@ function queueSharedSong(playlistId, songIndex) {
                         fid = s.filePath.slice(6);
                     } else {
                         entry.filePath = s.filePath;
+                        try { entry.url = await sbGetFileUrl(s.filePath); } catch (_) {}
                     }
                 }
                 if (fid) {
@@ -1734,10 +1716,9 @@ function queueSharedSong(playlistId, songIndex) {
                                     const file = new File([stored.data], stored.name, { type: stored.type || 'audio/mpeg' });
                                     const publicUrl = await sbUploadForShare(file, currentUser);
                                     entry.url = publicUrl;
-                                    entry.isLocal = false;
                                     uploaded = true;
                                 } catch (e) {
-                                    console.warn('Supabase upload failed, using local ref', e);
+                                    console.warn('Supabase upload failed', e);
                                 }
                             }
                             if (!uploaded) {
@@ -2766,6 +2747,35 @@ window.addEventListener('beforeunload', () => {
     }
 });
 
+async function syncLocalFilesToServer() {
+    if (!sbUser || !_supabase) return;
+    let changed = false;
+    for (const s of songs) {
+        if (!s.isLocal) continue;
+        if (s.url && s.url.startsWith('http')) continue;
+        const fid = s.fileId || (s.filePath && s.filePath.startsWith('idxdb:') ? s.filePath.slice(6) : null);
+        if (fid) {
+            try {
+                const stored = await dbGet(fid);
+                if (stored && stored.data) {
+                    const file = new File([stored.data], stored.name, { type: stored.type || 'audio/mpeg' });
+                    s.filePath = await sbUploadFile(sbUser.id, file);
+                    s.url = await sbGetFileUrl(s.filePath);
+                    s.fileId = null;
+                    try { await dbDelete(fid); } catch (_) {}
+                    changed = true;
+                }
+            } catch (_) {}
+        } else if (s.filePath && !s.filePath.startsWith('idxdb:') && !s.url) {
+            try {
+                s.url = await sbGetFileUrl(s.filePath);
+                changed = true;
+            } catch (_) {}
+        }
+    }
+    if (changed) save();
+}
+
 async function showApp() {
     document.getElementById('login-overlay').style.display = 'none';
     document.querySelector('.app').style.display = 'block';
@@ -2786,6 +2796,7 @@ async function showApp() {
     renderLibrary();
     renderPlaylists();
     renderPlayer();
+    syncLocalFilesToServer();
     await renderCommunity();
     updatePlayerUI();
 }
