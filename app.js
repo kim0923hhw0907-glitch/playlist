@@ -1694,15 +1694,17 @@ async function getMappedProfile(username) {
 }
 
 async function showProfile(username) {
-    profileViewUser = decodeURIComponent(username);
-    const profile = await getMappedProfile(username);
-    const isOwn = username === currentUser;
+    let decoded;
+    try { decoded = decodeURIComponent(username); } catch (_) { decoded = username; }
+    profileViewUser = decoded;
+    const profile = await getMappedProfile(decoded);
+    const isOwn = decoded === currentUser;
 
     document.getElementById('profile-banner-img').style.backgroundImage = profile.banner ? 'url(' + profile.banner + ')' : '';
     document.getElementById('profile-avatar').src = profile.avatar || '';
     document.getElementById('profile-avatar').style.display = profile.avatar ? 'block' : 'none';
-    document.getElementById('profile-display-name').textContent = profile.displayName || username;
-    document.getElementById('profile-username').textContent = '@' + username;
+    document.getElementById('profile-display-name').textContent = profile.displayName || decoded;
+    document.getElementById('profile-username').textContent = '@' + decoded;
     document.getElementById('profile-bio').textContent = profile.bio || '';
     document.getElementById('profile-bio').style.display = profile.bio ? 'block' : 'none';
     document.getElementById('profile-heart-count').textContent = profile.hearts || 0;
