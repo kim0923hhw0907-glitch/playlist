@@ -71,13 +71,17 @@ async function loadUserData() {
     if (!sbUser) return;
     try {
         const dbSongs = await sbLoadSongs(sbUser.id);
-        songs = dbSongs.map(s => ({
-            id: s.id, title: s.title, artist: s.artist, url: s.url,
-            logo: s.logo || '', lyrics: s.lyrics || '',
-            filePath: s.file_path || '', isLocal: s.is_local || !!s.file_path
-        }));
+        if (dbSongs && dbSongs.length > 0) {
+            songs = dbSongs.map(s => ({
+                id: s.id, title: s.title, artist: s.artist, url: s.url,
+                logo: s.logo || '', lyrics: s.lyrics || '',
+                filePath: s.file_path || '', isLocal: s.is_local || !!s.file_path
+            }));
+        }
         const dbPlaylists = await sbLoadPlaylists(sbUser.id);
-        playlists = dbPlaylists.map(p => ({ ...p, song_ids: typeof p.song_ids === 'string' ? JSON.parse(p.song_ids) : (p.song_ids || []) }));
+        if (dbPlaylists && dbPlaylists.length > 0) {
+            playlists = dbPlaylists.map(p => ({ ...p, song_ids: typeof p.song_ids === 'string' ? JSON.parse(p.song_ids) : (p.song_ids || []) }));
+        }
     } catch (e) {
         console.warn('Failed to load from Supabase, using local fallback', e);
         songs = JSON.parse(localStorage.getItem(userKey('pl_songs2'))) || [];
@@ -92,6 +96,8 @@ async function loadUserData() {
         renderSharedPlaylists();
     } catch (e) {
         console.warn('Failed to load shared playlists', e);
+        sharedPlaylists = migrateSharedPlaylists();
+        renderSharedPlaylists();
     }
 
     const savedUI = JSON.parse(localStorage.getItem(userKey('pl_ui')));
@@ -2515,7 +2521,6 @@ async function loginUser(username, password) {
         sbLogin(username, password).then(data => {
             if (data && data.user) {
                 sbUser = data.user;
-                currentUser = data.user.user_metadata?.username || username;
                 localStorage.setItem(userKey('pl_session'), username);
                 loadUserData();
             }
@@ -2556,7 +2561,7 @@ async function handleLoginClick() {
         if (!username) { document.getElementById('login-error').textContent = '사용자 이름을 입력하세요'; loginInProgress = false; return; }
         if (!password) { document.getElementById('login-error').textContent = '비밀번호를 입력하세요'; loginInProgress = false; return; }
         const ok = await loginUser(username, password);
-        if (ok) showApp();
+        if (ok) await showApp();
     } catch (e) {
         console.error('handleLoginClick error:', e);
         document.getElementById('login-error').textContent = '오류: ' + e.message;
@@ -2617,14 +2622,14 @@ document.getElementById('user-display').addEventListener('click', () => {
         sharedPlaylists = migrateSharedPlaylists();
             const savedUI = JSON.parse(localStorage.getItem(userKey('pl_ui')));
             if (savedUI) uiSettings = savedUI;
-            showApp();
+            await showApp();
 
-            // Try Supabase session sync in background
+            // Sync shared playlists from Supabase (background, no data loss)
             if (sbConfigured && _supabase) {
                 sbGetSession().then(({ data }) => {
                     if (data && data.session) {
                         sbUser = data.session.user;
-                        currentUser = sbUser.user_metadata?.username || effectiveUser;
+                        // Don't change currentUser — keep localStorage identity
                         loadUserData().catch(() => {});
                     }
                 }).catch(e => console.warn('Supabase background session check failed', e));
