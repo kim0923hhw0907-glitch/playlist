@@ -62,6 +62,7 @@ let sbUser = null; // Supabase auth user object
 let sharedPlaylists = [];
 let sharedGenreFilter = 'all';
 let sharedDurationFilter = 'all';
+let deletedSharedIds = new Set();
 
 function userKey(base) {
     if (!currentUser || currentUser === '__legacy__') return base;
@@ -110,9 +111,10 @@ async function loadUserData() {
 
     // ─── Shared playlists: merge server + local (preserve likes/comments from both) ───
     try {
-        const localShared = JSON.parse(localStorage.getItem('pl_shared')) || [];
+        loadDeletedSharedIds();
+        const localShared = (JSON.parse(localStorage.getItem('pl_shared')) || []).filter(p => p && !deletedSharedIds.has(p.id));
         const map = new Map(localShared.map(p => [p.id, p]));
-        const serverData = await sbLoadShared();
+        const serverData = (await sbLoadShared()).filter(p => p && !deletedSharedIds.has(p.id));
         serverData.forEach(p => {
             const existing = map.get(p.id);
             if (existing) {
@@ -1305,7 +1307,6 @@ function renderPlaylists() {
         const expanded = expandedPlaylistId === pl.id;
         const plSongs = getPlaylistSongs(pl.id);
         const availSongs = songs.filter(s => !pl.songs.includes(s.id));
-        const addId = 'add-sel-' + pl.id;
         const quickAddId = 'quick-add-' + pl.id;
         return '<div class="card playlist-card"><div style="width:100%">' +
             '<div class="playlist-header">' +
@@ -1324,10 +1325,8 @@ function renderPlaylists() {
                 '</div>' +
             '</div>' +
             '<div id="' + quickAddId + '" class="quick-add" style="display:none">' +
-                '<select onchange="quickAddSong(\'' + pl.id + '\', this.value, this)">' +
-                    '<option value="">-- 노래 선택 --</option>' +
-                    availSongs.map(s => '<option value="' + s.id + '">' + esc(s.title) + ' - ' + esc(s.artist) + '</option>').join('') +
-                '</select>' +
+                '<input type="text" class="playlist-song-search" placeholder="노래 검색..." oninput="searchPlaylistSongs(\'' + pl.id + '\', this)">' +
+                '<div class="playlist-search-results"></div>' +
             '</div>' +
             (expanded ? '<div class="playlist-body">' +
                 '<ul class="playlist-songs">' +
@@ -1347,11 +1346,8 @@ function renderPlaylists() {
                 '</ul>' +
                 (availSongs.length > 0 ?
                     '<div class="playlist-add">' +
-                        '<select id="' + addId + '">' +
-                            '<option value="">-- 노래 선택 --</option>' +
-                            availSongs.map(s => '<option value="' + s.id + '">' + esc(s.title) + ' - ' + esc(s.artist) + '</option>').join('') +
-                        '</select>' +
-                        '<button class="btn-primary" onclick="addSongFromSelect(\'' + pl.id + '\')">추가</button>' +
+                        '<input type="text" class="playlist-song-search" placeholder="노래 검색..." oninput="searchPlaylistSongs(\'' + pl.id + '\', this)">' +
+                        '<div class="playlist-search-results"></div>' +
                     '</div>' :
                     '<p style="color:var(--text-secondary);margin-top:10px;font-size:0.85rem">추가할 곡이 없습니다</p>') +
             '</div>' : '') +
@@ -1361,7 +1357,34 @@ function renderPlaylists() {
 
 function toggleQuickAdd(id) {
     const el = document.getElementById('quick-add-' + id);
-    if (el) el.style.display = el.style.display === 'none' ? 'block' : 'none';
+    if (el) {
+        el.style.display = el.style.display === 'none' ? 'block' : 'none';
+        if (el.style.display === 'block') {
+            const inp = el.querySelector('.playlist-song-search');
+            if (inp) { inp.value = ''; inp.focus(); }
+            const res = el.querySelector('.playlist-search-results');
+            if (res) res.innerHTML = '';
+        }
+    }
+}
+
+function searchPlaylistSongs(plId, input) {
+    const resultsEl = input.parentElement.querySelector('.playlist-search-results');
+    if (!resultsEl) return;
+    const q = input.value.trim().toLowerCase();
+    if (!q) { resultsEl.innerHTML = ''; return; }
+    const pl = getPlaylist(plId);
+    if (!pl) return;
+    const matches = songs.filter(s => !pl.songs.includes(s.id) && (s.title.toLowerCase().includes(q) || s.artist.toLowerCase().includes(q)));
+    if (matches.length === 0) {
+        resultsEl.innerHTML = '<div class="search-result-item" style="color:var(--text-secondary);padding:6px 8px">일치하는 곡이 없습니다</div>';
+        return;
+    }
+    resultsEl.innerHTML = matches.map(s =>
+        '<div class="search-result-item" onclick="addSongToPlaylist(\'' + plId + '\',\'' + s.id + '\');this.parentElement.innerHTML=\'\';this.parentElement.previousElementSibling.value=\'\'">' +
+            esc(s.title) + ' - ' + esc(s.artist) +
+        '</div>'
+    ).join('');
 }
 
 function quickAddSong(pid, sid, sel) {
@@ -1398,6 +1421,9 @@ async function renderCommunity() {
     } else {
         console.log('renderCommunity: _supabase is null, using local only');
     }
+    // Filter out previously deleted playlists (server still has them if sbDeleteShared failed)
+    loadDeletedSharedIds();
+    serverData = serverData.filter(p => p && !deletedSharedIds.has(p.id));
     // Merge: combine server data (authoritative) with local updates (likes/comments)
     const map = new Map();
     serverData.forEach(p => { if (p) map.set(p.id, p); });
@@ -1721,6 +1747,13 @@ async function importSharedPlaylist() {
     }
 }
 
+function loadDeletedSharedIds() {
+    try { deletedSharedIds = new Set(JSON.parse(localStorage.getItem('pl_deleted_shared')) || []); } catch (_) { deletedSharedIds = new Set(); }
+}
+function saveDeletedSharedIds() {
+    try { localStorage.setItem('pl_deleted_shared', JSON.stringify([...deletedSharedIds])); } catch (_) {}
+}
+
 async function deleteSharedPlaylist(id) {
     const sp = sharedPlaylists.find(p => p.id === id);
     if (!sp) return;
@@ -1730,6 +1763,8 @@ async function deleteSharedPlaylist(id) {
     }
     if (!confirm('이 공유 플레이리스트를 삭제하시겠습니까?')) return;
     sharedPlaylists = sharedPlaylists.filter(p => p.id !== id);
+    deletedSharedIds.add(id);
+    saveDeletedSharedIds();
     try { await sbDeleteShared(id); } catch (e) { console.warn('Failed to delete from server', e); }
     await saveShared();
     renderSharedPlaylists();
@@ -1887,18 +1922,10 @@ function toggleProfileEdit() {
 async function saveProfile() {
     const dn = document.getElementById('profile-edit-name').value.trim() || profileViewUser;
     const bio = document.getElementById('profile-edit-bio').value.trim();
-    // Save to Supabase if available
-    if (sbUser) {
+    // Save to Supabase if available (use UPDATE, not upsert — banner/avatar URLs untouched)
+    if (sbUser && _supabase) {
         try {
-            // Preserve existing banner/avatar URLs (upsert replaces the whole row)
-            let bannerUrl = '', avatarUrl = '';
-            try { const existing = await sbLoadProfile(profileViewUser); if (existing) { bannerUrl = existing.banner_url || ''; avatarUrl = existing.avatar_url || ''; } } catch (_) {}
-            const local = getLocalProfiles();
-            if (local[profileViewUser]) {
-                if (local[profileViewUser].banner_url) bannerUrl = bannerUrl || local[profileViewUser].banner_url;
-                if (local[profileViewUser].avatar_url) avatarUrl = avatarUrl || local[profileViewUser].avatar_url;
-            }
-            await sbUpsertProfile({ id: sbUser.id, username: profileViewUser, display_name: dn, bio: bio, banner_url: bannerUrl, avatar_url: avatarUrl });
+            await _supabase.from('profiles').update({ display_name: dn, bio: bio }).eq('id', sbUser.id);
         } catch (e) {
             console.warn('Failed to save profile to server', e);
         }
@@ -1919,8 +1946,8 @@ document.getElementById('profile-banner-file').addEventListener('change', async 
     try {
         const userId = sbUser ? sbUser.id : currentUser;
         const url = await sbUploadProfileFile(userId, 'banner', file, !sbUser);
-        if (sbUser) {
-            await sbUpsertProfile({ id: sbUser.id, username: profileViewUser, banner_url: url });
+        if (sbUser && _supabase) {
+            try { await _supabase.from('profiles').update({ banner_url: url }).eq('id', sbUser.id); } catch (_) {}
         }
         document.getElementById('profile-banner-img').style.backgroundImage = 'url(' + url + ')';
         saveLocalProfile(profileViewUser, { banner_url: url });
@@ -1945,8 +1972,8 @@ document.getElementById('profile-avatar-file').addEventListener('change', async 
     try {
         const userId = sbUser ? sbUser.id : currentUser;
         const url = await sbUploadProfileFile(userId, 'avatar', file, !sbUser);
-        if (sbUser) {
-            await sbUpsertProfile({ id: sbUser.id, username: profileViewUser, avatar_url: url });
+        if (sbUser && _supabase) {
+            try { await _supabase.from('profiles').update({ avatar_url: url }).eq('id', sbUser.id); } catch (_) {}
         }
         document.getElementById('profile-avatar').src = url;
         document.getElementById('profile-avatar').style.display = 'block';
@@ -2782,6 +2809,7 @@ document.getElementById('user-display').addEventListener('click', () => {
 (async function init() {
     console.log('init() running, sbConfigured:', sbConfigured, '_supabase:', !!_supabase, 'supabase SDK:', typeof supabase);
     updateSupabaseStatus();
+    loadDeletedSharedIds();
 
     // 1. Try Supabase session first (cross-device)
     if (sbConfigured && _supabase) {
