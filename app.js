@@ -69,8 +69,10 @@ function userKey(base) {
 
 async function loadUserData() {
     if (!sbUser) return;
+    const username = sbUser.user_metadata?.username || sbUser.email?.replace('@pl.local', '') || currentUser;
     try {
         const dbSongs = await sbLoadSongs(sbUser.id);
+        const hasLocalSongs = !dbSongs || dbSongs.length === 0;
         if (dbSongs && dbSongs.length > 0) {
             songs = dbSongs.map(s => ({
                 id: s.id, title: s.title, artist: s.artist, url: s.url,
@@ -78,14 +80,30 @@ async function loadUserData() {
                 filePath: s.file_path || '', isLocal: s.is_local || !!s.file_path
             }));
         }
+        // Migrate localStorage data to Supabase if Supabase is empty
+        if (hasLocalSongs && username) {
+            const localSongs = JSON.parse(localStorage.getItem('pl_songs2_' + username)) || JSON.parse(localStorage.getItem('pl_songs2') || '[]');
+            if (localSongs.length > 0) {
+                songs = localSongs;
+                await sbSaveSongs(sbUser.id, songs);
+            }
+        }
         const dbPlaylists = await sbLoadPlaylists(sbUser.id);
+        const hasLocalPlaylists = !dbPlaylists || dbPlaylists.length === 0;
         if (dbPlaylists && dbPlaylists.length > 0) {
             playlists = dbPlaylists.map(p => ({ ...p, song_ids: typeof p.song_ids === 'string' ? JSON.parse(p.song_ids) : (p.song_ids || []) }));
         }
+        if (hasLocalPlaylists && username) {
+            const localPlaylists = JSON.parse(localStorage.getItem('pl_playlists2_' + username)) || JSON.parse(localStorage.getItem('pl_playlists2') || '[]');
+            if (localPlaylists.length > 0) {
+                playlists = localPlaylists;
+                await sbSavePlaylists(sbUser.id, playlists);
+            }
+        }
     } catch (e) {
         console.warn('Failed to load from Supabase, using local fallback', e);
-        songs = JSON.parse(localStorage.getItem(userKey('pl_songs2'))) || [];
-        playlists = JSON.parse(localStorage.getItem(userKey('pl_playlists2'))) || [];
+        songs = JSON.parse(localStorage.getItem(userKey('pl_songs2'))) || JSON.parse(localStorage.getItem('pl_songs2') || '[]');
+        playlists = JSON.parse(localStorage.getItem(userKey('pl_playlists2'))) || JSON.parse(localStorage.getItem('pl_playlists2') || '[]');
     }
     try {
         const serverData = await sbLoadShared();
@@ -1338,17 +1356,21 @@ async function renderCommunity() {
         sel.innerHTML = '<option value="">-- 플레이리스트 선택 --</option>' +
             playlists.map(p => '<option value="' + p.id + '">' + esc(p.name) + ' (' + p.songs.length + '곡)</option>').join('');
     }
-    try {
-        const serverData = await sbLoadShared();
-        // Merge with local shared playlists (preserve local-only entries from other accounts)
-        const map = new Map(sharedPlaylists.map(p => [p.id, p]));
-        serverData.forEach(p => map.set(p.id, p));
-        sharedPlaylists = Array.from(map.values());
-        // Persist merged data so other accounts see it
-        saveShared();
-    } catch (e) {
-        console.warn('Failed to load shared playlists from server', e);
+    // Always try to load from Supabase (cross-device)
+    let serverData = [];
+    if (_supabase) {
+        try {
+            serverData = await sbLoadShared();
+        } catch (e) {
+            console.warn('Failed to load shared playlists from server', e);
+        }
     }
+    // Merge: server data overwrites local, local-only entries preserved
+    const map = new Map();
+    (sharedPlaylists || []).forEach(p => { if (p) map.set(p.id, p); });
+    serverData.forEach(p => { if (p) map.set(p.id, p); });
+    sharedPlaylists = Array.from(map.values());
+    saveShared();
     renderSharedPlaylists();
 }
 
@@ -2475,7 +2497,21 @@ async function registerUser(username, password) {
     if (username.length < 2) { document.getElementById('login-error').textContent = '사용자 이름은 2자 이상이어야 합니다'; return false; }
     if (password.length < 4) { document.getElementById('login-error').textContent = '비밀번호는 4자 이상이어야 합니다'; return false; }
 
-    // Save locally first (instant)
+    // Try Supabase first (cross-device)
+    if (sbConfigured && _supabase) {
+        try {
+            const data = await sbRegister(username, password);
+            if (data && data.user) {
+                document.getElementById('login-error').textContent = '회원가입 성공! 로그인해 주세요';
+                document.getElementById('login-error').style.color = 'var(--accent)';
+                return true;
+            }
+        } catch (e) {
+            console.warn('Supabase register failed, fallback to local', e);
+        }
+    }
+
+    // Fallback: save to localStorage (device-only)
     const users = JSON.parse(localStorage.getItem('pl_users')) || [];
     if (users.some(u => u.username === username)) {
         document.getElementById('login-error').textContent = '이미 존재하는 사용자입니다.';
@@ -2483,21 +2519,8 @@ async function registerUser(username, password) {
     }
     users.push({ username, password });
     localStorage.setItem('pl_users', JSON.stringify(users));
-    document.getElementById('login-error').textContent = '회원가입 성공! 로그인해 주세요';
+    document.getElementById('login-error').textContent = '회원가입 성공! (로컬 전용, 다른 기기와 미동기) 로그인해 주세요';
     document.getElementById('login-error').style.color = 'var(--accent)';
-
-    // Try Supabase in background
-    if (sbConfigured) {
-        sbRegister(username, password).then(data => {
-            if (data && data.user) {
-                const users2 = JSON.parse(localStorage.getItem('pl_users')) || [];
-                if (!users2.some(u => u.username === username)) {
-                    users2.push({ username, password });
-                    localStorage.setItem('pl_users', JSON.stringify(users2));
-                }
-            }
-        }).catch(e => console.warn('Supabase register background failed', e));
-    }
     return true;
 }
 
@@ -2505,16 +2528,31 @@ async function loginUser(username, password) {
     console.log('loginUser called', username, sbConfigured, !!_supabase);
     document.getElementById('login-error').textContent = '';
 
-    // Try localStorage first (instant, no network)
+    // Try Supabase first (cross-device)
+    if (sbConfigured && _supabase) {
+        try {
+            const data = await sbLogin(username, password);
+            if (data && data.user) {
+                sbUser = data.user;
+                currentUser = data.user.user_metadata?.username || username;
+                localStorage.setItem(userKey('pl_session'), username);
+                localStorage.setItem('pl_last_user', username);
+                await loadUserData();
+                document.getElementById('login-error').textContent = '';
+                return true;
+            }
+        } catch (e) {
+            console.warn('Supabase login failed, trying local fallback', e);
+        }
+    }
+
+    // Fallback: localStorage
     const users = JSON.parse(localStorage.getItem('pl_users')) || [];
     const match = users.find(u => u.username === username);
-
     if (match && match.password !== password) {
         document.getElementById('login-error').textContent = '비밀번호가 틀렸습니다.';
         return false;
     }
-
-    // Check if user has existing data
     const hasUserSpecificData = localStorage.getItem('pl_songs2_' + username) !== null;
     if (!match && !hasUserSpecificData) {
         document.getElementById('login-error').textContent = '존재하지 않는 사용자입니다. 회원가입해 주세요';
@@ -2526,28 +2564,12 @@ async function loginUser(username, password) {
     currentUser = username;
     localStorage.setItem(userKey('pl_session'), username);
     localStorage.setItem('pl_last_user', username);
-    // Load user-specific data (no cross-user fallback)
     songs = JSON.parse(localStorage.getItem(userKey('pl_songs2'))) || [];
     playlists = JSON.parse(localStorage.getItem(userKey('pl_playlists2'))) || [];
     sharedPlaylists = migrateSharedPlaylists();
     const savedUI = JSON.parse(localStorage.getItem(userKey('pl_ui')));
-    if (savedUI) {
-        uiSettings = savedUI;
-    } else {
-        uiSettings = { bgImages: [], bgMode: 'single', bgInterval: 10, bgIndex: 0, accent: '#6c63ff', blur: 10, dim: 50, playBtnImage: '' };
-    }
+    uiSettings = savedUI || { bgImages: [], bgMode: 'single', bgInterval: 10, bgIndex: 0, accent: '#6c63ff', blur: 10, dim: 50, playBtnImage: '' };
     document.getElementById('login-error').textContent = '';
-
-    // Try Supabase sync in background (fast local response first)
-    if (sbConfigured && _supabase) {
-        sbLogin(username, password).then(data => {
-            if (data && data.user) {
-                sbUser = data.user;
-                localStorage.setItem(userKey('pl_session'), username);
-                loadUserData();
-            }
-        }).catch(e => console.warn('Supabase background sync failed', e));
-    }
     return true;
 }
 
@@ -2628,7 +2650,23 @@ document.getElementById('user-display').addEventListener('click', () => {
 (async function init() {
     console.log('init() running, sbConfigured:', sbConfigured, '_supabase:', !!_supabase);
 
-    // Check localStorage FIRST (instant, no network)
+    // 1. Try Supabase session first (cross-device)
+    if (sbConfigured && _supabase) {
+        try {
+            const { data } = await sbGetSession();
+            if (data && data.session) {
+                sbUser = data.session.user;
+                currentUser = sbUser.user_metadata?.username || sbUser.email?.replace('@pl.local', '') || 'user';
+                await loadUserData();
+                await showApp();
+                return;
+            }
+        } catch (e) {
+            console.warn('init(): Supabase session failed', e);
+        }
+    }
+
+    // 2. Fallback: localStorage (device-only)
     try {
         const users = JSON.parse(localStorage.getItem('pl_users')) || [];
         const lastUser = localStorage.getItem('pl_last_user');
@@ -2641,21 +2679,10 @@ document.getElementById('user-display').addEventListener('click', () => {
             sbUser = null;
             songs = JSON.parse(localStorage.getItem(userKey('pl_songs2'))) || [];
             playlists = JSON.parse(localStorage.getItem(userKey('pl_playlists2'))) || [];
-        sharedPlaylists = migrateSharedPlaylists();
+            sharedPlaylists = migrateSharedPlaylists();
             const savedUI = JSON.parse(localStorage.getItem(userKey('pl_ui')));
             if (savedUI) uiSettings = savedUI;
             await showApp();
-
-            // Sync shared playlists from Supabase (background, no data loss)
-            if (sbConfigured && _supabase) {
-                sbGetSession().then(({ data }) => {
-                    if (data && data.session) {
-                        sbUser = data.session.user;
-                        // Don't change currentUser — keep localStorage identity
-                        loadUserData().catch(() => {});
-                    }
-                }).catch(e => console.warn('Supabase background session check failed', e));
-            }
             return;
         }
     } catch (e) {

@@ -103,8 +103,14 @@ alter table public.shared_playlists enable row level security;
 create policy "Shared playlists are viewable by everyone"
   on public.shared_playlists for select using (true);
 
-create policy "Authenticated users can insert shared playlists"
-  on public.shared_playlists for insert with check (auth.role() = 'authenticated');
+create policy "Anyone can insert shared playlists"
+  on public.shared_playlists for insert with check (true);
+
+create policy "Anyone can update shared playlists"
+  on public.shared_playlists for update using (true);
+
+create policy "Anyone can delete shared playlists"
+  on public.shared_playlists for delete using (true);
 
 create policy "Users can update their own shared playlists"
   on public.shared_playlists for update using (auth.uid() = user_id);
