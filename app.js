@@ -2468,6 +2468,11 @@ async function showApp() {
     document.getElementById('login-overlay').style.display = 'none';
     document.querySelector('.app').style.display = 'block';
     document.getElementById('user-info').style.display = 'flex';
+    const syncEl = document.getElementById('sync-status');
+    if (syncEl) {
+        syncEl.textContent = sbUser ? '☁️' : '💻';
+        syncEl.title = sbUser ? '서버 동기화 중 (Supabase)' : '로컬 전용 모드';
+    }
     let displayName = currentUser;
     try {
         const profile = currentUser ? await getMappedProfile(currentUser) : null;
@@ -2498,41 +2503,41 @@ async function registerUser(username, password) {
     if (password.length < 4) { document.getElementById('login-error').textContent = '비밀번호는 4자 이상이어야 합니다'; return false; }
 
     // Try Supabase first (cross-device)
+    let sbOk = false;
     if (sbConfigured && _supabase) {
         try {
             const data = await sbRegister(username, password);
             if (data && data.user) {
-                document.getElementById('login-error').textContent = '회원가입 성공! 로그인해 주세요';
-                document.getElementById('login-error').style.color = 'var(--accent)';
-                return true;
+                sbOk = true;
             }
         } catch (e) {
             console.warn('Supabase register failed, fallback to local', e);
         }
     }
 
-    // Fallback: save to localStorage (device-only)
+    // Always save to localStorage as backup (for login fallback)
     const users = JSON.parse(localStorage.getItem('pl_users')) || [];
-    if (users.some(u => u.username === username)) {
-        document.getElementById('login-error').textContent = '이미 존재하는 사용자입니다.';
-        return false;
+    if (!users.some(u => u.username === username)) {
+        users.push({ username, password });
+        localStorage.setItem('pl_users', JSON.stringify(users));
     }
-    users.push({ username, password });
-    localStorage.setItem('pl_users', JSON.stringify(users));
-    document.getElementById('login-error').textContent = '회원가입 성공! (로컬 전용, 다른 기기와 미동기) 로그인해 주세요';
+    const msg = sbOk ? '회원가입 성공! 로그인해 주세요' : '회원가입 성공! (로컬 전용, 다른 기기와 미동기) 로그인해 주세요';
+    document.getElementById('login-error').textContent = msg;
     document.getElementById('login-error').style.color = 'var(--accent)';
     return true;
 }
 
 async function loginUser(username, password) {
-    console.log('loginUser called', username, sbConfigured, !!_supabase);
+    console.log('loginUser called', username, 'sbConfigured:', sbConfigured, '_supabase:', !!_supabase, 'supabase SDK:', typeof supabase);
     document.getElementById('login-error').textContent = '';
+    updateSupabaseStatus();
 
     // Try Supabase first (cross-device)
     if (sbConfigured && _supabase) {
         try {
             const data = await sbLogin(username, password);
             if (data && data.user) {
+                console.log('Supabase login succeeded for', username, 'user id:', data.user.id);
                 sbUser = data.user;
                 currentUser = data.user.user_metadata?.username || username;
                 localStorage.setItem(userKey('pl_session'), username);
@@ -2542,7 +2547,7 @@ async function loginUser(username, password) {
                 return true;
             }
         } catch (e) {
-            console.warn('Supabase login failed, trying local fallback', e);
+            console.warn('Supabase login failed: ' + e.message + '. Trying local fallback.', e);
         }
     }
 
@@ -2648,7 +2653,8 @@ document.getElementById('user-display').addEventListener('click', () => {
 
 // On page load, check session
 (async function init() {
-    console.log('init() running, sbConfigured:', sbConfigured, '_supabase:', !!_supabase);
+    console.log('init() running, sbConfigured:', sbConfigured, '_supabase:', !!_supabase, 'supabase SDK:', typeof supabase);
+    updateSupabaseStatus();
 
     // 1. Try Supabase session first (cross-device)
     if (sbConfigured && _supabase) {

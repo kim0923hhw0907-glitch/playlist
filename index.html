@@ -16,6 +16,7 @@
         <div class="login-card">
             <h1 class="login-title">플레이리스트</h1>
             <p class="login-subtitle">로그인하여 나만의 플레이리스트를 관리하세요</p>
+            <div id="supabase-status" class="supabase-status" style="font-size:0.75rem;margin-bottom:4px;padding:2px 8px;border-radius:4px;background:rgba(255,255,255,0.05)">Supabase 연결 확인 중...</div>
             <div id="login-error" class="login-error"></div>
             <input type="text" id="login-username" placeholder="사용자 이름" autocomplete="username">
             <input type="password" id="login-password" placeholder="비밀번호" autocomplete="current-password">
@@ -29,6 +30,7 @@
             <div class="header-row">
                 <h1>내 플레이리스트</h1>
                 <div id="user-info" class="user-info" style="display:none">
+                    <span id="sync-status" style="font-size:0.7rem;margin-right:8px;opacity:0.7"></span>
                     <span id="user-display" class="user-name"></span>
                     <button id="logout-btn" class="btn-small">로그아웃</button>
                 </div>

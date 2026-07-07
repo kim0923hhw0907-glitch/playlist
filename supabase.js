@@ -16,6 +16,39 @@ try {
     console.warn('Supabase init failed, falling back to localStorage', e);
 }
 
+async function sbTestConnection() {
+    if (!_supabase) return { ok: false, reason: '_supabase is null' };
+    try {
+        const { error } = await _supabase.from('shared_playlists').select('id').limit(1);
+        if (error) return { ok: false, reason: 'DB query: ' + error.message };
+        return { ok: true };
+    } catch (e) {
+        return { ok: false, reason: e.message };
+    }
+}
+
+async function updateSupabaseStatus() {
+    const el = document.getElementById('supabase-status');
+    if (!el) return;
+    if (_supabase) {
+        const test = await sbTestConnection();
+        if (test.ok) {
+            el.textContent = 'Supabase 연결됨 (멀티 기기 동기화)';
+            el.style.color = '#4ade80';
+        } else {
+            el.textContent = 'Supabase 연결 실패: ' + test.reason;
+            el.style.color = '#f87171';
+        }
+    } else if (sbConfigured) {
+        const why = typeof supabase === 'undefined' ? 'SDK 로딩 실패 (CDN 차단?)' : typeof supabase?.createClient !== 'function' ? 'SDK 버전 호환성 문제' : '초기화 오류';
+        el.textContent = 'Supabase 미연결 (' + why + ') — 로컬 전용 모드';
+        el.style.color = '#f87171';
+    } else {
+        el.textContent = 'Supabase 미설정 (환경 변수 필요)';
+        el.style.color = '#fbbf24';
+    }
+}
+
 // ─── Auth ───
 
 async function sbRegister(username, password) {
