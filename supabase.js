@@ -95,7 +95,8 @@ function sbUserId() {
 
 async function sbLoadSongs(userId) {
     if (!_supabase) return [];
-    const { data } = await _supabase.from('songs').select('*').eq('user_id', userId);
+    const { data, error } = await _supabase.from('songs').select('*').eq('user_id', userId);
+    if (error) { console.warn('sbLoadSongs error:', error); return []; }
     return data || [];
 }
 
@@ -127,7 +128,9 @@ async function sbSaveSongs(userId, songs) {
     for (const s of toDelete) {
         ops.push(_supabase.from('songs').delete().eq('id', s.id).eq('user_id', userId));
     }
-    await Promise.all(ops);
+    const results = await Promise.all(ops);
+    const errors = results.filter(r => r && r.error);
+    if (errors.length > 0) console.warn('sbSaveSongs errors:', errors);
 }
 
 // ─── Playlists ───
@@ -142,7 +145,8 @@ function playlistToDb(p, userId) {
 
 async function sbLoadPlaylists(userId) {
     if (!_supabase) return [];
-    const { data } = await _supabase.from('playlists').select('*').eq('user_id', userId);
+    const { data, error } = await _supabase.from('playlists').select('*').eq('user_id', userId);
+    if (error) { console.warn('sbLoadPlaylists error:', error); return []; }
     return data || [];
 }
 
@@ -164,7 +168,9 @@ async function sbSavePlaylists(userId, playlists) {
     for (const p of toDelete) {
         ops.push(_supabase.from('playlists').delete().eq('id', p.id).eq('user_id', userId));
     }
-    await Promise.all(ops);
+    const results = await Promise.all(ops);
+    const errors = results.filter(r => r && r.error);
+    if (errors.length > 0) console.warn('sbSavePlaylists errors:', errors);
 }
 
 // ─── Shared Playlists ───
@@ -204,15 +210,18 @@ function sharedFromDb(item) {
 
 async function sbLoadShared() {
     if (!_supabase) return [];
-    const { data } = await _supabase.from('shared_playlists').select('*').order('created_at', { ascending: false });
-    return (data || []).map(sharedFromDb);
+    const { data, error } = await _supabase.from('shared_playlists').select('*').order('created_at', { ascending: false });
+    if (error) { console.warn('sbLoadShared error:', error); return []; }
+    if (!data || data.length === 0) { console.log('sbLoadShared: no shared playlists found'); return []; }
+    return data.map(sharedFromDb);
 }
 
 async function sbAddShared(item) {
-    if (!_supabase) return;
+    if (!_supabase) throw new Error('Supabase가 설정되지 않았습니다');
     const userId = (await sbUserId()) || null;
     const { error } = await _supabase.from('shared_playlists').insert(sharedToDb({ ...item, user_id: userId }));
     if (error) throw new Error(error.message);
+    console.log('sbAddShared: insert succeeded for', item.id, 'user_id:', userId);
 }
 
 // updates uses camelCase keys from JS; convert to snake_case for DB

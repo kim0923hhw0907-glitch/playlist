@@ -1361,15 +1361,19 @@ async function renderCommunity() {
     if (_supabase) {
         try {
             serverData = await sbLoadShared();
+            console.log('renderCommunity: loaded ' + serverData.length + ' shared playlists from server');
         } catch (e) {
             console.warn('Failed to load shared playlists from server', e);
         }
+    } else {
+        console.log('renderCommunity: _supabase is null, using local only');
     }
     // Merge: server data overwrites local, local-only entries preserved
     const map = new Map();
     (sharedPlaylists || []).forEach(p => { if (p) map.set(p.id, p); });
     serverData.forEach(p => { if (p) map.set(p.id, p); });
     sharedPlaylists = Array.from(map.values());
+    console.log('renderCommunity: merged list has ' + sharedPlaylists.length + ' playlists');
     saveShared();
     renderSharedPlaylists();
 }
@@ -1523,14 +1527,20 @@ function setSharedDurationFilter(d) {
         if (pl.logo) shared.logo = pl.logo;
         sharedPlaylists.unshift(shared);
         let sbOk = false;
-        try { await sbAddShared(shared); sbOk = true; } catch (e) { console.warn('Failed to share to server', e); }
+        let sbErr = '';
+        if (_supabase) {
+            try { await sbAddShared(shared); sbOk = true; console.log('Shared playlist saved to server:', shared.id); } catch (e) { sbErr = e.message; console.warn('Failed to share to server:', e); }
+        } else {
+            sbErr = 'Supabase 미연결';
+            console.warn('Supabase not available, shared locally only');
+        }
         await saveShared();
         renderSharedPlaylists();
         form.reset();
         document.getElementById('share-genre-custom').style.display = 'none';
         document.getElementById('share-duration-custom').style.display = 'none';
         const fileCount = songData.filter(s => s.fileData || s.fileRef).length;
-        const sbMsg = sbOk ? '' : ' (서버 저장 실패 — 같은 브라우저에서만 보입니다)';
+        const sbMsg = sbOk ? '' : ' (서버 저장 실패: ' + sbErr + ' — 같은 브라우저에서만 보입니다)';
         alert('플레이리스트가 공유되었습니다 (' + fileCount + '개 파일 포함)' + sbMsg);
     });
 
