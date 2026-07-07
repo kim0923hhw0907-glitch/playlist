@@ -1863,6 +1863,46 @@ input[type="range"]::-moz-range-track {
     font-size: 0.78rem;
 }
 
+.shared-songs-list {
+    display: none;
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid rgba(255,255,255,0.06);
+}
+
+.shared-songs-list.visible {
+    display: block;
+}
+
+.shared-song-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 8px 10px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: var(--transition);
+    gap: 8px;
+}
+
+.shared-song-row:hover {
+    background: rgba(255,255,255,0.06);
+}
+
+.shared-song-row .song-title {
+    font-size: 0.88rem;
+    color: var(--text-primary);
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.shared-song-row .song-artist {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    flex-shrink: 0;
+}
+
 .shared-comments {
     display: none;
     margin-top: 10px;

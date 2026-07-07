@@ -72,44 +72,64 @@ async function loadUserData() {
     if (!sbUser) return;
     const username = sbUser.user_metadata?.username || sbUser.email?.replace('@pl.local', '') || currentUser;
     try {
+        // ─── Songs: merge server + local (never discard either) ───
         const dbSongs = await sbLoadSongs(sbUser.id);
-        const hasLocalSongs = !dbSongs || dbSongs.length === 0;
+        const localSongs = JSON.parse(localStorage.getItem(userKey('pl_songs2'))) || JSON.parse(localStorage.getItem('pl_songs2') || '[]');
         if (dbSongs && dbSongs.length > 0) {
-            songs = dbSongs.map(s => ({
+            const serverSongs = dbSongs.map(s => ({
                 id: s.id, title: s.title, artist: s.artist, url: s.url,
                 logo: s.logo || '', lyrics: s.lyrics || '',
                 filePath: s.file_path || '', isLocal: s.is_local || !!s.file_path
             }));
+            const serverIds = new Set(serverSongs.map(s => s.id));
+            songs = serverSongs;
+            // Preserve local-only songs (added offline, etc.)
+            localSongs.forEach(s => { if (s.id && !serverIds.has(s.id)) songs.push(s); });
+        } else if (localSongs.length > 0) {
+            songs = localSongs;
+            await sbSaveSongs(sbUser.id, songs);
         }
-        // Migrate localStorage data to Supabase if Supabase is empty
-        if (hasLocalSongs && username) {
-            const localSongs = JSON.parse(localStorage.getItem('pl_songs2_' + username)) || JSON.parse(localStorage.getItem('pl_songs2') || '[]');
-            if (localSongs.length > 0) {
-                songs = localSongs;
-                await sbSaveSongs(sbUser.id, songs);
-            }
-        }
+
+        // ─── Playlists: merge server + local ───
         const dbPlaylists = await sbLoadPlaylists(sbUser.id);
-        const hasLocalPlaylists = !dbPlaylists || dbPlaylists.length === 0;
+        const localPlaylists = JSON.parse(localStorage.getItem(userKey('pl_playlists2'))) || JSON.parse(localStorage.getItem('pl_playlists2') || '[]');
         if (dbPlaylists && dbPlaylists.length > 0) {
-            playlists = dbPlaylists.map(p => ({ ...p, song_ids: typeof p.song_ids === 'string' ? JSON.parse(p.song_ids) : (p.song_ids || []) }));
-        }
-        if (hasLocalPlaylists && username) {
-            const localPlaylists = JSON.parse(localStorage.getItem('pl_playlists2_' + username)) || JSON.parse(localStorage.getItem('pl_playlists2') || '[]');
-            if (localPlaylists.length > 0) {
-                playlists = localPlaylists;
-                await sbSavePlaylists(sbUser.id, playlists);
-            }
+            const serverPlaylists = dbPlaylists.map(p => ({ ...p, song_ids: typeof p.song_ids === 'string' ? JSON.parse(p.song_ids) : (p.song_ids || []) }));
+            const serverIds = new Set(serverPlaylists.map(p => p.id));
+            playlists = serverPlaylists;
+            localPlaylists.forEach(p => { if (p.id && !serverIds.has(p.id)) playlists.push(p); });
+        } else if (localPlaylists.length > 0) {
+            playlists = localPlaylists;
+            await sbSavePlaylists(sbUser.id, playlists);
         }
     } catch (e) {
         console.warn('Failed to load from Supabase, using local fallback', e);
         songs = JSON.parse(localStorage.getItem(userKey('pl_songs2'))) || JSON.parse(localStorage.getItem('pl_songs2') || '[]');
         playlists = JSON.parse(localStorage.getItem(userKey('pl_playlists2'))) || JSON.parse(localStorage.getItem('pl_playlists2') || '[]');
     }
+
+    // ─── Shared playlists: merge server + local (preserve likes/comments from both) ───
     try {
+        const localShared = JSON.parse(localStorage.getItem('pl_shared')) || [];
+        const map = new Map(localShared.map(p => [p.id, p]));
         const serverData = await sbLoadShared();
-        const map = new Map(sharedPlaylists.map(p => [p.id, p]));
-        serverData.forEach(p => map.set(p.id, p));
+        serverData.forEach(p => {
+            const existing = map.get(p.id);
+            if (existing) {
+                existing.likes = Math.max(existing.likes || 0, p.likes || 0);
+                existing.dislikes = Math.max(existing.dislikes || 0, p.dislikes || 0);
+                existing.likedBy = [...new Set([...(existing.likedBy || []), ...(p.likedBy || [])])];
+                existing.dislikedBy = [...new Set([...(existing.dislikedBy || []), ...(p.dislikedBy || [])])];
+                const seen = new Map();
+                [...(existing.comments || []), ...(p.comments || [])].forEach(c => {
+                    const key = c.author + '|' + c.text + '|' + (c.createdAt || '');
+                    if (!seen.has(key)) seen.set(key, c);
+                });
+                existing.comments = Array.from(seen.values());
+            } else {
+                map.set(p.id, p);
+            }
+        });
         sharedPlaylists = Array.from(map.values());
         saveShared();
         renderSharedPlaylists();
@@ -1456,8 +1476,8 @@ function renderSharedPlaylists() {
                 '<span class="badge">' + esc(genreLabel) + '</span>' +
                 '<span class="badge badge-duration">' + esc(durLabel) + '</span>' +
             '</div>' +
-            '<div class="shared-card-meta">' +
-                '<span class="song-count">' + sp.songs.length + '곡</span>' +
+                '<div class="shared-card-meta">' +
+                '<span class="song-count" onclick="toggleSharedSongs(\'' + sp.id + '\')" style="cursor:pointer">🎵 ' + sp.songs.length + '곡 <span class="toggle-arrow" id="arrow-' + sp.id + '">▶</span></span>' +
                 '<div class="shared-card-rating">' +
                     '<button class="rate-btn' + (liked ? ' active' : '') + '" onclick="likeSharedPlaylist(\'' + sp.id + '\')" title="좋아요">👍 <span id="like-cnt-' + sp.id + '">' + (sp.likes || 0) + '</span></button>' +
                     '<button class="rate-btn' + (disliked ? ' active' : '') + '" onclick="dislikeSharedPlaylist(\'' + sp.id + '\')" title="싫어요">👎 <span id="dislike-cnt-' + sp.id + '">' + (sp.dislikes || 0) + '</span></button>' +
@@ -1468,6 +1488,12 @@ function renderSharedPlaylists() {
                     '<button class="btn-small" onclick="downloadSharedPlaylist(\'' + sp.id + '\')">다운로드</button>' +
                     '<button class="btn-small btn-danger" onclick="deleteSharedPlaylist(\'' + sp.id + '\')">삭제</button>' +
                 '</div>' +
+            '</div>' +
+            '<div id="shared-songs-' + sp.id + '" class="shared-songs-list">' +
+                sp.songs.map((s, i) => '<div class="shared-song-row" onclick="queueSharedSong(\'' + sp.id + '\',' + i + ')">' +
+                    '<span class="song-title">' + esc(s.title) + '</span>' +
+                    '<span class="song-artist">' + esc(s.artist) + '</span>' +
+                '</div>').join('') +
             '</div>' +
             '<div id="' + commId + '" class="shared-comments">' +
                 '<div class="comments-list">' +
@@ -1492,6 +1518,35 @@ function setSharedGenreFilter(g) {
 function setSharedDurationFilter(d) {
     sharedDurationFilter = d;
     renderSharedPlaylists();
+}
+
+function toggleSharedSongs(id) {
+    const el = document.getElementById('shared-songs-' + id);
+    if (!el) return;
+    const visible = el.classList.toggle('visible');
+    const arrow = document.getElementById('arrow-' + id);
+    if (arrow) arrow.textContent = visible ? '▼' : '▶';
+}
+
+function queueSharedSong(playlistId, songIndex) {
+    const sp = sharedPlaylists.find(p => p.id === playlistId);
+    if (!sp || !sp.songs[songIndex]) return;
+    const ss = sp.songs[songIndex];
+    // Queue the song for playback without adding to library
+    queue = [{
+        id: 'shared_' + playlistId + '_' + songIndex,
+        title: ss.title,
+        artist: ss.artist,
+        url: ss.url || '',
+        isLocal: false,
+        filePath: '',
+        fileId: null,
+        fileRef: null
+    }];
+    queueIndex = 0;
+    currentPlaylistId = null;
+    switchToPlayer();
+    loadSong(0);
 }
 
 // Share form handler
