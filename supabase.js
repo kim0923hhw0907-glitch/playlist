@@ -138,8 +138,7 @@ async function sbSaveSongs(userId, songs) {
 function playlistToDb(p, userId) {
     return {
         id: p.id, user_id: userId,
-        name: p.name, song_ids: p.song_ids || [],
-        created_at: p.createdAt ? new Date(p.createdAt).toISOString() : new Date().toISOString()
+        name: p.name, song_ids: p.song_ids || []
     };
 }
 
@@ -187,8 +186,7 @@ function sharedToDb(item) {
         songs: item.songs || [],
         likes: item.likes || 0, dislikes: item.dislikes || 0,
         liked_by: item.likedBy || [], disliked_by: item.dislikedBy || [],
-        comments: item.comments || [],
-        created_at: item.createdAt ? new Date(item.createdAt).toISOString() : new Date().toISOString()
+        comments: item.comments || []
     };
 }
 
@@ -219,7 +217,9 @@ async function sbLoadShared() {
 async function sbAddShared(item) {
     if (!_supabase) throw new Error('Supabase가 설정되지 않았습니다');
     const userId = (await sbUserId()) || null;
-    const { error } = await _supabase.from('shared_playlists').insert(sharedToDb({ ...item, user_id: userId }));
+    const dbItem = sharedToDb({ ...item, user_id: userId });
+    console.log('sbAddShared sending:', JSON.stringify(dbItem).slice(0, 500));
+    const { error } = await _supabase.from('shared_playlists').insert(dbItem);
     if (error) throw new Error(error.message);
     console.log('sbAddShared: insert succeeded for', item.id, 'user_id:', userId);
 }
