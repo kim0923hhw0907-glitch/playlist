@@ -1673,9 +1673,10 @@ function saveLocalProfile(username, data) {
 async function loadProfile(username) {
     let data = null;
     try { data = await sbLoadProfile(username); } catch (_) {}
-    if (!data) {
-        const local = getLocalProfiles();
-        data = local[username] || null;
+    // Always merge with local profile (local takes priority)
+    const local = getLocalProfiles();
+    if (local[username]) {
+        data = { ...defaultProfile, ...(data || {}), ...local[username], username };
     }
     return data || { ...defaultProfile, username };
 }
