@@ -1494,16 +1494,37 @@ function setSharedDurationFilter(d) {
             if (s.logo) entry.logo = s.logo;
             if (s.lyrics) entry.lyrics = s.lyrics;
             if (s.isLocal) {
-                if (s.filePath && !s.filePath.startsWith('idxdb:')) {
-                    entry.filePath = s.filePath;
-                } else if (s.fileId || (s.filePath && s.filePath.startsWith('idxdb:'))) {
+                let fid = null;
+                if (s.fileId) {
+                    fid = s.fileId;
+                } else if (s.filePath) {
+                    if (s.filePath.startsWith('idxdb:')) {
+                        fid = s.filePath.slice(6);
+                    } else {
+                        entry.filePath = s.filePath;
+                    }
+                }
+                if (fid) {
                     try {
-                        const fid = s.fileId || s.filePath.slice(6);
                         const stored = await dbGet(fid);
                         if (stored && stored.data) {
-                            const refId = 'shared_' + uid();
-                            await dbPut(refId, stored.data, stored.name, stored.type);
-                            entry.fileRef = refId;
+                            let uploaded = false;
+                            if (_supabase) {
+                                try {
+                                    const file = new File([stored.data], stored.name, { type: stored.type || 'audio/mpeg' });
+                                    const publicUrl = await sbUploadForShare(file, currentUser);
+                                    entry.url = publicUrl;
+                                    entry.isLocal = false;
+                                    uploaded = true;
+                                } catch (e) {
+                                    console.warn('Supabase upload failed, using local ref', e);
+                                }
+                            }
+                            if (!uploaded) {
+                                const refId = 'shared_' + uid();
+                                await dbPut(refId, stored.data, stored.name, stored.type);
+                                entry.fileRef = refId;
+                            }
                         }
                     } catch (_) {}
                 }
@@ -1539,9 +1560,10 @@ function setSharedDurationFilter(d) {
         form.reset();
         document.getElementById('share-genre-custom').style.display = 'none';
         document.getElementById('share-duration-custom').style.display = 'none';
-        const fileCount = songData.filter(s => s.fileData || s.fileRef).length;
+        const fileCount = songsList.filter(s => s.isLocal).length;
+        const uploadedCount = songData.filter(s => s.url && s.url.startsWith('http') && !s.url.includes('youtube')).length;
         const sbMsg = sbOk ? '' : ' (서버 저장 실패: ' + sbErr + ' — 같은 브라우저에서만 보입니다)';
-        alert('플레이리스트가 공유되었습니다 (' + fileCount + '개 파일 포함)' + sbMsg);
+        alert('플레이리스트가 공유되었습니다 (' + fileCount + '개 파일 중 ' + uploadedCount + '개 서버 업로드 완료)' + sbMsg);
     });
 
     // Toggle custom inputs
@@ -1786,7 +1808,15 @@ async function saveProfile() {
     // Save to Supabase if available
     if (sbUser) {
         try {
-            await sbUpsertProfile({ id: sbUser.id, username: profileViewUser, display_name: dn, bio: bio });
+            // Preserve existing banner/avatar URLs (upsert replaces the whole row)
+            let bannerUrl = '', avatarUrl = '';
+            try { const existing = await sbLoadProfile(profileViewUser); if (existing) { bannerUrl = existing.banner_url || ''; avatarUrl = existing.avatar_url || ''; } } catch (_) {}
+            const local = getLocalProfiles();
+            if (local[profileViewUser]) {
+                if (local[profileViewUser].banner_url) bannerUrl = bannerUrl || local[profileViewUser].banner_url;
+                if (local[profileViewUser].avatar_url) avatarUrl = avatarUrl || local[profileViewUser].avatar_url;
+            }
+            await sbUpsertProfile({ id: sbUser.id, username: profileViewUser, display_name: dn, bio: bio, banner_url: bannerUrl, avatar_url: avatarUrl });
         } catch (e) {
             console.warn('Failed to save profile to server', e);
         }
@@ -1803,24 +1833,25 @@ async function saveProfile() {
 document.getElementById('profile-banner-file').addEventListener('change', async function() {
     const file = this.files[0];
     if (!file) return;
-    // Try Supabase upload
-    if (sbUser) {
-        try {
-            const url = await sbUploadProfileFile(sbUser.id, 'banner', file);
+    // Try Supabase upload (works for anonymous users via shared/ prefix)
+    try {
+        const userId = sbUser ? sbUser.id : currentUser;
+        const url = await sbUploadProfileFile(userId, 'banner', file, !sbUser);
+        if (sbUser) {
             await sbUpsertProfile({ id: sbUser.id, username: profileViewUser, banner_url: url });
-            document.getElementById('profile-banner-img').style.backgroundImage = 'url(' + url + ')';
-            saveLocalProfile(profileViewUser, { banner_url: url });
-            return;
-        } catch (e) {
-            console.warn('Banner upload failed, falling back to local', e);
         }
+        document.getElementById('profile-banner-img').style.backgroundImage = 'url(' + url + ')';
+        saveLocalProfile(profileViewUser, { banner_url: url });
+        return;
+    } catch (e) {
+        console.warn('Banner upload failed, falling back to local', e);
     }
     // Local fallback: read as data URL
     const reader = new FileReader();
     reader.onload = function() {
         const dataUrl = reader.result;
         document.getElementById('profile-banner-img').style.backgroundImage = 'url(' + dataUrl + ')';
-        saveLocalProfile(profileViewUser, { banner_url: dataUrl });
+        try { saveLocalProfile(profileViewUser, { banner_url: dataUrl }); } catch (_) { console.warn('Data URL too large for localStorage, banner not persisted'); }
     };
     reader.readAsDataURL(file);
 });
@@ -1828,18 +1859,19 @@ document.getElementById('profile-banner-file').addEventListener('change', async 
 document.getElementById('profile-avatar-file').addEventListener('change', async function() {
     const file = this.files[0];
     if (!file) return;
-    // Try Supabase upload
-    if (sbUser) {
-        try {
-            const url = await sbUploadProfileFile(sbUser.id, 'avatar', file);
+    // Try Supabase upload (works for anonymous users via shared/ prefix)
+    try {
+        const userId = sbUser ? sbUser.id : currentUser;
+        const url = await sbUploadProfileFile(userId, 'avatar', file, !sbUser);
+        if (sbUser) {
             await sbUpsertProfile({ id: sbUser.id, username: profileViewUser, avatar_url: url });
-            document.getElementById('profile-avatar').src = url;
-            document.getElementById('profile-avatar').style.display = 'block';
-            saveLocalProfile(profileViewUser, { avatar_url: url });
-            return;
-        } catch (e) {
-            console.warn('Avatar upload failed, falling back to local', e);
         }
+        document.getElementById('profile-avatar').src = url;
+        document.getElementById('profile-avatar').style.display = 'block';
+        saveLocalProfile(profileViewUser, { avatar_url: url });
+        return;
+    } catch (e) {
+        console.warn('Avatar upload failed, falling back to local', e);
     }
     // Local fallback: read as data URL
     const reader = new FileReader();
@@ -1847,7 +1879,7 @@ document.getElementById('profile-avatar-file').addEventListener('change', async 
         const dataUrl = reader.result;
         document.getElementById('profile-avatar').src = dataUrl;
         document.getElementById('profile-avatar').style.display = 'block';
-        saveLocalProfile(profileViewUser, { avatar_url: dataUrl });
+        try { saveLocalProfile(profileViewUser, { avatar_url: dataUrl }); } catch (_) { console.warn('Data URL too large for localStorage, avatar not persisted'); }
     };
     reader.readAsDataURL(file);
 });
@@ -2098,15 +2130,15 @@ async function loadSong(index) {
                     throw new Error('파일을 불러올 수 없습니다');
                 }
             }
-        } else if (song.fileId) {
-            // Legacy: fileId-based
-            const fileData = await dbGet(song.fileId);
+        } else if (song.fileId || song.fileRef) {
+            const key = song.fileId || song.fileRef;
+            const fileData = await dbGet(key);
             if (fileData) {
                 const blob = new Blob([fileData.data], { type: fileData.type || 'audio/mpeg' });
                 currentBlobUrl = URL.createObjectURL(blob);
                 audio.src = currentBlobUrl;
             } else {
-                throw new Error('파일을 찾을 수 없습니다');
+                throw new Error('이 파일은 다른 기기에서 공유된 로컬 파일입니다');
             }
         } else {
             audio.src = song.url;

@@ -131,6 +131,9 @@ create policy "Authenticated users can upload audio files"
 create policy "Users can delete their own audio files"
   on storage.objects for delete using (bucket_id = 'audio' and auth.uid() = owner);
 
+create policy "Anyone can upload shared audio files"
+  on storage.objects for insert with check (bucket_id = 'audio' and name like 'shared/%');
+
 -- 6. Create profiles automatically on signup
 create or replace function public.handle_new_user()
 returns trigger as $$

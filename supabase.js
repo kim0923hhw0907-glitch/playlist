@@ -262,6 +262,19 @@ async function sbUploadFile(userId, file) {
     return path;
 }
 
+async function sbUploadForShare(file, username) {
+    if (!_supabase) throw new Error('Supabase가 설정되지 않았습니다');
+    const safeName = file.name.replace(/[/\\:?<>*|"]/g, '_');
+    const path = 'shared/' + (username || 'anon') + '/' + Date.now() + '_' + safeName;
+    const { error } = await _supabase.storage.from('audio').upload(path, file, {
+        contentType: file.type,
+        upsert: false
+    });
+    if (error) throw new Error(error.message);
+    const { data } = _supabase.storage.from('audio').getPublicUrl(path);
+    return data.publicUrl;
+}
+
 async function sbGetFileUrl(path) {
     if (!_supabase) return '';
     const { data } = _supabase.storage.from('audio').getPublicUrl(path);
@@ -289,9 +302,10 @@ async function sbUpsertProfile(profile) {
 
 // ─── Storage helpers (for profile banner/avatar, etc.) ───
 
-async function sbUploadProfileFile(userId, folder, file) {
+async function sbUploadProfileFile(userId, folder, file, isAnonymous) {
     if (!_supabase) throw new Error('Supabase가 설정되지 않았습니다');
-    const path = 'profile/' + userId + '/' + folder + '_' + Date.now();
+    const prefix = isAnonymous ? 'shared/profiles' : 'profile';
+    const path = prefix + '/' + userId + '/' + folder + '_' + Date.now();
     const { error } = await _supabase.storage.from('audio').upload(path, file, { upsert: true, contentType: file.type });
     if (error) throw new Error(error.message);
     const { data } = _supabase.storage.from('audio').getPublicUrl(path);
