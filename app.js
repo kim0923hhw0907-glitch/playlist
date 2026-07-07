@@ -73,15 +73,22 @@ async function loadUserData() {
     if (!sbUser) return;
     const username = sbUser.user_metadata?.username || sbUser.email?.replace('@pl.local', '') || currentUser;
     try {
-        // ─── Songs: merge server + local (never discard either) ───
+        // ─── Songs: merge server + local (never discard either, preserve local fields) ───
         const dbSongs = await sbLoadSongs(sbUser.id);
         const localSongs = JSON.parse(localStorage.getItem(userKey('pl_songs2'))) || JSON.parse(localStorage.getItem('pl_songs2') || '[]');
         if (dbSongs && dbSongs.length > 0) {
-            const serverSongs = dbSongs.map(s => ({
-                id: s.id, title: s.title, artist: s.artist, url: s.url,
-                logo: s.logo || '', lyrics: s.lyrics || '',
-                filePath: s.file_path || '', isLocal: s.is_local || !!s.file_path
-            }));
+            const localMap = new Map(localSongs.filter(s => s && s.id).map(s => [s.id, s]));
+            const serverSongs = dbSongs.map(s => {
+                const local = localMap.get(s.id);
+                return {
+                    id: s.id, title: s.title || (local ? local.title : ''), artist: s.artist || (local ? local.artist : ''),
+                    url: s.url || (local ? local.url || '' : ''),
+                    logo: s.logo || (local ? local.logo || '' : ''),
+                    lyrics: s.lyrics || (local ? local.lyrics || '' : ''),
+                    filePath: s.file_path || (local ? local.filePath || '' : ''),
+                    isLocal: s.is_local || !!s.file_path || (local ? !!local.isLocal : false)
+                };
+            });
             const serverIds = new Set(serverSongs.map(s => s.id));
             songs = serverSongs;
             // Preserve local-only songs (added offline, etc.)
@@ -91,11 +98,19 @@ async function loadUserData() {
             await sbSaveSongs(sbUser.id, songs);
         }
 
-        // ─── Playlists: merge server + local ───
+        // ─── Playlists: merge server + local (preserve local logo etc.) ───
         const dbPlaylists = await sbLoadPlaylists(sbUser.id);
         const localPlaylists = JSON.parse(localStorage.getItem(userKey('pl_playlists2'))) || JSON.parse(localStorage.getItem('pl_playlists2') || '[]');
         if (dbPlaylists && dbPlaylists.length > 0) {
-            const serverPlaylists = dbPlaylists.map(p => ({ ...p, song_ids: typeof p.song_ids === 'string' ? JSON.parse(p.song_ids) : (p.song_ids || []) }));
+            const localMap = new Map(localPlaylists.filter(p => p && p.id).map(p => [p.id, p]));
+            const serverPlaylists = dbPlaylists.map(p => {
+                const local = localMap.get(p.id);
+                const merged = { ...p, song_ids: typeof p.song_ids === 'string' ? JSON.parse(p.song_ids) : (p.song_ids || []) };
+                if (local) {
+                    if (!merged.logo && local.logo) merged.logo = local.logo;
+                }
+                return merged;
+            });
             const serverIds = new Set(serverPlaylists.map(p => p.id));
             playlists = serverPlaylists;
             localPlaylists.forEach(p => { if (p.id && !serverIds.has(p.id)) playlists.push(p); });
@@ -2717,6 +2732,14 @@ function stopVisualizer() {
 window.addEventListener('resize', () => {
     const canvas = document.getElementById('visualizer');
     if (canvas && canvas.classList.contains('show')) startVisualizer();
+});
+
+// Save on page unload/refresh
+window.addEventListener('beforeunload', () => {
+    if (currentUser) {
+        try { localStorage.setItem(userKey('pl_songs2'), JSON.stringify(songs)); } catch (_) {}
+        try { localStorage.setItem(userKey('pl_playlists2'), JSON.stringify(playlists)); } catch (_) {}
+    }
 });
 
 async function showApp() {

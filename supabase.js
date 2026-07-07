@@ -138,7 +138,7 @@ async function sbSaveSongs(userId, songs) {
 function playlistToDb(p, userId) {
     return {
         id: p.id, user_id: userId,
-        name: p.name, song_ids: p.song_ids || []
+        name: p.name, logo: p.logo || '', song_ids: p.song_ids || []
     };
 }
 
