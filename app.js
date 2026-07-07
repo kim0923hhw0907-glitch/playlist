@@ -87,7 +87,7 @@ async function loadUserData() {
         sharedPlaylists = await sbLoadShared();
     } catch (e) {
         console.warn('Failed to load shared playlists', e);
-        sharedPlaylists = JSON.parse(localStorage.getItem(userKey('pl_shared'))) || [];
+        sharedPlaylists = migrateSharedPlaylists();
     }
 
     const savedUI = JSON.parse(localStorage.getItem(userKey('pl_ui')));
@@ -463,9 +463,28 @@ async function save() {
     await saveUserData();
 }
 
+function migrateSharedPlaylists() {
+    // Merge any per-user pl_shared_* data into the global pl_shared (one-time migration)
+    const existing = JSON.parse(localStorage.getItem('pl_shared')) || [];
+    const seen = new Set(existing.map(p => p.id));
+    let migrated = false;
+    for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && key.startsWith('pl_shared_') && key !== 'pl_shared') {
+            try {
+                const data = JSON.parse(localStorage.getItem(key)) || [];
+                data.forEach(p => { if (!seen.has(p.id)) { existing.push(p); seen.add(p.id); migrated = true; } });
+            } catch (_) {}
+            localStorage.removeItem(key);
+        }
+    }
+    if (migrated) localStorage.setItem('pl_shared', JSON.stringify(existing));
+    return existing;
+}
+
 async function saveShared() {
     try {
-        localStorage.setItem(userKey('pl_shared'), JSON.stringify(sharedPlaylists));
+        localStorage.setItem('pl_shared', JSON.stringify(sharedPlaylists));
     } catch (_) {}
 }
 
@@ -2415,8 +2434,8 @@ async function loginUser(username, password) {
     // Load user-specific data (no cross-user fallback)
     songs = JSON.parse(localStorage.getItem(userKey('pl_songs2'))) || [];
     playlists = JSON.parse(localStorage.getItem(userKey('pl_playlists2'))) || [];
-    sharedPlaylists = JSON.parse(localStorage.getItem(userKey('pl_shared'))) || [];
-    const savedUI = JSON.parse(localStorage.getItem(userKey('pl_ui')));
+            sharedPlaylists = migrateSharedPlaylists();
+            const savedUI = JSON.parse(localStorage.getItem(userKey('pl_ui')));
     if (savedUI) {
         uiSettings = savedUI;
     } else {
@@ -2528,7 +2547,7 @@ document.getElementById('user-display').addEventListener('click', () => {
             sbUser = null;
             songs = JSON.parse(localStorage.getItem(userKey('pl_songs2'))) || [];
             playlists = JSON.parse(localStorage.getItem(userKey('pl_playlists2'))) || [];
-            sharedPlaylists = JSON.parse(localStorage.getItem(userKey('pl_shared'))) || [];
+        sharedPlaylists = migrateSharedPlaylists();
             const savedUI = JSON.parse(localStorage.getItem(userKey('pl_ui')));
             if (savedUI) uiSettings = savedUI;
             showApp();
