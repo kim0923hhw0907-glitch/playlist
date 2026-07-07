@@ -186,7 +186,8 @@ function sharedToDb(item) {
         songs: item.songs || [],
         likes: item.likes || 0, dislikes: item.dislikes || 0,
         liked_by: item.likedBy || [], disliked_by: item.dislikedBy || [],
-        comments: item.comments || []
+        comments: item.comments || [],
+        deleted: item.deleted || false
     };
 }
 
@@ -202,7 +203,8 @@ function sharedFromDb(item) {
         likes: item.likes || 0, dislikes: item.dislikes || 0,
         likedBy: item.liked_by || [], dislikedBy: item.disliked_by || [],
         comments: typeof item.comments === 'string' ? JSON.parse(item.comments) : (item.comments || []),
-        createdAt: item.created_at || Date.now()
+        createdAt: item.created_at || Date.now(),
+        deleted: item.deleted || false
     };
 }
 
@@ -246,7 +248,7 @@ async function sbUpdateShared(id, updates) {
 
 async function sbDeleteShared(id) {
     if (!_supabase) return;
-    await _supabase.from('shared_playlists').delete().eq('id', id);
+    await _supabase.from('shared_playlists').update({ deleted: true }).eq('id', id);
 }
 
 // ─── Files (Supabase Storage) ───

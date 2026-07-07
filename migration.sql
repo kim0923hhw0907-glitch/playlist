@@ -80,6 +80,9 @@ create policy "Users can update their own playlists"
 create policy "Users can delete their own playlists"
   on public.playlists for delete using (auth.uid() = user_id);
 
+-- Add deleted column to existing shared_playlists table (run if upgrading)
+-- alter table public.shared_playlists add column if not exists deleted boolean default false;
+
 -- 4. Shared_playlists table
 create table if not exists public.shared_playlists (
   id text primary key,
@@ -98,6 +101,7 @@ create table if not exists public.shared_playlists (
   liked_by jsonb default '[]'::jsonb,
   disliked_by jsonb default '[]'::jsonb,
   comments jsonb default '[]'::jsonb,
+  deleted boolean default false,
   created_at timestamptz default now()
 );
 

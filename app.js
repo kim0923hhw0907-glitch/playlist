@@ -114,8 +114,17 @@ async function loadUserData() {
         loadDeletedSharedIds();
         const localShared = (JSON.parse(localStorage.getItem('pl_shared')) || []).filter(p => p && !deletedSharedIds.has(p.id));
         const map = new Map(localShared.map(p => [p.id, p]));
-        const serverData = (await sbLoadShared()).filter(p => p && !deletedSharedIds.has(p.id));
+        const serverData = await sbLoadShared();
         serverData.forEach(p => {
+            if (!p) return;
+            if (p.deleted) {
+                // Soft-deleted: remove from local and track
+                map.delete(p.id);
+                deletedSharedIds.add(p.id);
+                saveDeletedSharedIds();
+                return;
+            }
+            if (deletedSharedIds.has(p.id)) return;
             const existing = map.get(p.id);
             if (existing) {
                 existing.likes = Math.max(existing.likes || 0, p.likes || 0);
@@ -978,8 +987,8 @@ function renderLibrary() {
         '<div class="card">' +
             '<div class="info">' +
                 (s.logo
-                    ? '<img class="song-logo" src="' + esc(s.logo) + '">'
-                    : '<div class="song-logo-placeholder">></div>') +
+                    ? '<img class="song-logo" src="' + esc(s.logo) + '" draggable="false" data-id="' + s.id + '" data-type="song">'
+                    : '<div class="song-logo-placeholder" draggable="false" data-id="' + s.id + '" data-type="song">></div>') +
                 '<div class="text-group">' +
                     '<h4>' + esc(s.title) + '</h4>' +
                     '<p>' + esc(s.artist) + '</p>' +
@@ -1353,7 +1362,7 @@ function renderPlaylists() {
         return '<div class="card playlist-card"><div style="width:100%">' +
             '<div class="playlist-header">' +
                 '<div class="info" onclick="toggleExpandPlaylist(\'' + pl.id + '\')">' +
-                    (pl.logo ? '<img class="playlist-logo" src="' + esc(pl.logo) + '">' : '<div class="playlist-logo-placeholder">></div>') +
+                    (pl.logo ? '<img class="playlist-logo" src="' + esc(pl.logo) + '" draggable="false" data-id="' + pl.id + '" data-type="playlist">' : '<div class="playlist-logo-placeholder" draggable="false" data-id="' + pl.id + '" data-type="playlist">></div>') +
                     '<div class="text-group">' +
                         '<h4>' + esc(pl.name) + '</h4>' +
                         '<p>' + pl.songs.length + '곡</p>' +
@@ -1375,7 +1384,7 @@ function renderPlaylists() {
                     (plSongs.length === 0 ? '<li style="color:var(--text-secondary);justify-content:center;border:none;padding:12px 0">곡이 없습니다</li>' :
                     plSongs.map((s, i) =>
                         '<li>' +
-                            (s.logo ? '<img class="song-logo" src="' + esc(s.logo) + '">' : '<div class="song-logo-placeholder">></div>') +
+                            (s.logo ? '<img class="song-logo" src="' + esc(s.logo) + '" draggable="false" data-id="' + s.id + '" data-type="song">' : '<div class="song-logo-placeholder" draggable="false" data-id="' + s.id + '" data-type="song">></div>') +
                             '<div class="song-info"><span>' + esc(s.title) + '</span><span style="color:var(--text-secondary);font-size:0.82rem"> - ' + esc(s.artist) + '</span></div>' +
                             '<div class="actions">' +
                                 '<button class="reorder-btn" onclick="moveSongInPlaylist(\'' + pl.id + '\', ' + i + ', -1)"' + (i === 0 ? ' disabled' : '') + '>▲</button>' +
@@ -1463,12 +1472,23 @@ async function renderCommunity() {
     } else {
         console.log('renderCommunity: _supabase is null, using local only');
     }
-    // Filter out previously deleted playlists (server still has them if sbDeleteShared failed)
+    // Handle soft-deleted playlists from server
     loadDeletedSharedIds();
-    serverData = serverData.filter(p => p && !deletedSharedIds.has(p.id));
+    const filteredServerData = [];
+    serverData.forEach(p => {
+        if (!p) return;
+        if (p.deleted) {
+            deletedSharedIds.add(p.id);
+            saveDeletedSharedIds();
+            // Also remove from current local sharedPlaylists
+            sharedPlaylists = sharedPlaylists.filter(lp => lp.id !== p.id);
+            return;
+        }
+        if (!deletedSharedIds.has(p.id)) filteredServerData.push(p);
+    });
     // Merge: combine server data (authoritative) with local updates (likes/comments)
     const map = new Map();
-    serverData.forEach(p => { if (p) map.set(p.id, p); });
+    filteredServerData.forEach(p => { if (p) map.set(p.id, p); });
     (sharedPlaylists || []).forEach(p => {
         if (!p) return;
         const existing = map.get(p.id);
@@ -1795,6 +1815,33 @@ function loadDeletedSharedIds() {
 function saveDeletedSharedIds() {
     try { localStorage.setItem('pl_deleted_shared', JSON.stringify([...deletedSharedIds])); } catch (_) {}
 }
+
+// Drag-and-drop logo for songs and playlists
+document.addEventListener('dragover', e => {
+    const logo = e.target.closest('.song-logo, .song-logo-placeholder, .playlist-logo, .playlist-logo-placeholder');
+    if (logo) { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; }
+});
+document.addEventListener('drop', async e => {
+    const logo = e.target.closest('.song-logo, .song-logo-placeholder, .playlist-logo, .playlist-logo-placeholder');
+    if (!logo) return;
+    e.preventDefault();
+    const file = e.dataTransfer.files[0];
+    if (!file || !file.type.startsWith('image/')) return;
+    const reader = new FileReader();
+    reader.onload = ev => {
+        const url = ev.target.result;
+        const id = logo.dataset.id;
+        const type = logo.dataset.type;
+        if (type === 'song') {
+            const s = getSong(id);
+            if (s) { s.logo = url; save(); renderLibrary(); renderPlaylists(); }
+        } else if (type === 'playlist') {
+            const p = getPlaylist(id);
+            if (p) { p.logo = url; save(); renderPlaylists(); }
+        }
+    };
+    reader.readAsDataURL(file);
+});
 
 async function deleteSharedPlaylist(id) {
     const sp = sharedPlaylists.find(p => p.id === id);
