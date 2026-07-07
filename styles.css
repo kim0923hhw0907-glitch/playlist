@@ -1756,6 +1756,12 @@ input[type="range"]::-moz-range-track {
 .shared-card-header .info .author {
     color: var(--text-secondary);
     font-size: 0.82rem;
+    cursor: pointer;
+    transition: color 0.2s;
+}
+.shared-card-header .info .author:hover {
+    color: var(--accent);
+    text-decoration: underline;
 }
 
 .shared-card-badges {
