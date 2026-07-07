@@ -988,10 +988,52 @@ function renderLibrary() {
             '<div class="actions">' +
                 '<button class="btn-small play-btn" onclick="playLibrarySong(\'' + s.id + '\')">재생</button>' +
                 '<button class="btn-small" onclick="editSong(\'' + s.id + '\')">수정</button>' +
+                '<span style="position:relative">' +
+                    '<button class="btn-small btn-add-playlist" onclick="event.stopPropagation();togglePlaylistPicker(\'' + s.id + '\', event)">+</button>' +
+                    '<div id="picker-' + s.id + '" class="playlist-picker" style="display:none"></div>' +
+                '</span>' +
                 '<button class="btn-danger" onclick="deleteSong(\'' + s.id + '\')">삭제</button>' +
             '</div>' +
         '</div>'
     ).join('');
+}
+
+function togglePlaylistPicker(songId, event) {
+    event.stopPropagation();
+    const picker = document.getElementById('picker-' + songId);
+    if (!picker) return;
+    if (picker.style.display === 'block') { picker.style.display = 'none'; return; }
+    // Close all other pickers first
+    document.querySelectorAll('.playlist-picker').forEach(p => p.style.display = 'none');
+    if (playlists.length === 0) {
+        picker.innerHTML = '<div class="picker-item" style="color:var(--text-secondary);cursor:default">플레이리스트가 없습니다</div>';
+    } else {
+        picker.innerHTML = playlists.map(pl =>
+            '<div class="picker-item" onclick="event.stopPropagation();addSongToPlaylistFromPicker(\'' + songId + '\',\'' + pl.id + '\')">' + esc(pl.name) + ' (' + pl.songs.length + '곡)</div>'
+        ).join('');
+    }
+    picker.style.display = 'block';
+    // Close on click outside
+    setTimeout(() => {
+        document.addEventListener('click', function closePicker(e) {
+            const p = document.getElementById('picker-' + songId);
+            if (p && !p.contains(e.target) && !e.target.closest('.btn-add-playlist')) {
+                p.style.display = 'none';
+            }
+            document.removeEventListener('click', closePicker);
+        }, { once: true });
+    }, 0);
+}
+
+function addSongToPlaylistFromPicker(songId, playlistId) {
+    const pl = getPlaylist(playlistId);
+    if (pl && !pl.songs.includes(songId)) {
+        pl.songs.push(songId);
+        save();
+        renderPlaylists();
+    }
+    // Close all pickers
+    document.querySelectorAll('.playlist-picker').forEach(p => p.style.display = 'none');
 }
 
 function onSongSearch() {
@@ -2741,6 +2783,8 @@ async function logoutUser() {
     isPlaying = false;
     isVideo = false;
     stopVisualizer();
+    // Save current data before clearing
+    await save();
     songs = [];
     playlists = [];
     queue = [];

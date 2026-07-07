@@ -268,6 +268,21 @@ nav {
     box-shadow: 0 2px 12px var(--accent-glow);
 }
 
+.btn-small.btn-add-playlist {
+    background: rgba(255,255,255,0.06);
+    border-color: rgba(255,255,255,0.1);
+    font-size: 1rem;
+    font-weight: 700;
+    line-height: 1;
+    padding: 6px 11px;
+    color: var(--accent);
+}
+.btn-small.btn-add-playlist:hover {
+    background: var(--accent);
+    color: #fff;
+    border-color: var(--accent);
+}
+
 /* Button click effect */
 .btn-primary:active,
 .btn-danger:active,
@@ -1198,8 +1213,8 @@ nav {
     max-height: 200px;
     overflow-y: auto;
     border-radius: 8px;
-    background: rgba(255,255,255,0.03);
-    border: 1px solid rgba(255,255,255,0.06);
+    background: #000;
+    border: 1px solid rgba(255,255,255,0.1);
 }
 .search-result-item {
     padding: 8px 12px;
@@ -1215,6 +1230,31 @@ nav {
 .search-result-item:hover {
     background: rgba(255,255,255,0.08);
 }
+
+.playlist-picker {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    z-index: 100;
+    min-width: 180px;
+    max-height: 220px;
+    overflow-y: auto;
+    background: #111;
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 10px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.6);
+    margin-top: 4px;
+}
+.picker-item {
+    padding: 9px 14px;
+    cursor: pointer;
+    font-size: 0.88rem;
+    color: var(--text-primary);
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+    transition: background 0.15s;
+}
+.picker-item:last-child { border-bottom: none; }
+.picker-item:hover { background: rgba(255,255,255,0.1); }
 
 .queue-header {
     display: flex;
