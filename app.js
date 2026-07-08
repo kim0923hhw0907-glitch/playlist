@@ -1677,7 +1677,8 @@ function queueSharedSong(playlistId, songIndex) {
         isLocal: ss.isLocal || false,
         filePath: ss.filePath || '',
         fileId: null,
-        fileRef: ss.fileRef || null
+        fileRef: ss.fileRef || null,
+        originalId: ss.id || null
     }];
     queueIndex = 0;
     currentPlaylistId = null;
@@ -1729,19 +1730,28 @@ function queueSharedSong(playlistId, songIndex) {
                         if (stored && stored.data) {
                             let uploaded = false;
                             if (_supabase) {
-                                try {
-                                    const file = new File([stored.data], stored.name, { type: stored.type || 'audio/mpeg' });
-                                    const publicUrl = await sbUploadForShare(file, currentUser);
-                                    entry.url = publicUrl;
-                                    uploaded = true;
-                                } catch (e) {
-                                    console.warn('Supabase upload failed', e);
+                                for (let retry = 0; retry < 3; retry++) {
+                                    try {
+                                        const file = new File([stored.data], stored.name, { type: stored.type || 'audio/mpeg' });
+                                        const publicUrl = await sbUploadForShare(file, currentUser);
+                                        entry.url = publicUrl;
+                                        uploaded = true;
+                                        break;
+                                    } catch (e) {
+                                        console.warn('Supabase upload failed (attempt ' + (retry + 1) + ')', e);
+                                        if (retry < 2) await new Promise(r => setTimeout(r, 1000));
+                                    }
                                 }
                             }
                             if (!uploaded) {
-                                const refId = 'shared_' + uid();
-                                await dbPut(refId, stored.data, stored.name, stored.type);
-                                entry.fileRef = refId;
+                                if (stored.data.byteLength < 500000) {
+                                    const base64 = arrayBufferToBase64(stored.data);
+                                    entry.url = 'data:' + (stored.type || 'audio/mpeg') + ';base64,' + base64;
+                                } else {
+                                    const refId = 'shared_' + uid();
+                                    await dbPut(refId, stored.data, stored.name, stored.type);
+                                    entry.fileRef = refId;
+                                }
                             }
                         }
                     } catch (_) {}
@@ -2392,8 +2402,15 @@ async function loadSong(index) {
                 audio.src = currentBlobUrl;
             } else if (song.url) {
                 audio.src = song.url;
+                audio.crossOrigin = 'anonymous';
             } else {
-                throw new Error('이 파일은 다른 기기에서 공유된 로컬 파일입니다');
+                const localMatch = song.originalId ? songs.find(s => s.id === song.originalId) : null;
+                if (localMatch) {
+                    audio.src = localMatch.url || '';
+                    audio.crossOrigin = localMatch.isLocal ? null : 'anonymous';
+                } else {
+                    throw new Error('이 파일은 다른 기기에서 공유된 로컬 파일입니다');
+                }
             }
         } else {
             audio.src = song.url;
