@@ -1672,6 +1672,8 @@ function queueSharedSong(playlistId, songIndex) {
         title: ss.title,
         artist: ss.artist,
         url: ss.url || '',
+        logo: ss.logo || '',
+        lyrics: ss.lyrics || '',
         isLocal: ss.isLocal || false,
         filePath: ss.filePath || '',
         fileId: null,
@@ -2388,12 +2390,15 @@ async function loadSong(index) {
                 const blob = new Blob([fileData.data], { type: fileData.type || 'audio/mpeg' });
                 currentBlobUrl = URL.createObjectURL(blob);
                 audio.src = currentBlobUrl;
+            } else if (song.url) {
+                audio.src = song.url;
             } else {
                 throw new Error('이 파일은 다른 기기에서 공유된 로컬 파일입니다');
             }
         } else {
             audio.src = song.url;
         }
+        audio.currentTime = 0;
         audio.load();
         await audio.play();
         isPlaying = true;
