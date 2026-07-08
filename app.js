@@ -1633,8 +1633,13 @@ function renderSharedPlaylists() {
             '</div>' +
             '<div id="shared-songs-' + sp.id + '" class="shared-songs-list">' +
                 sp.songs.map((s, i) => '<div class="shared-song-row" onclick="queueSharedSong(\'' + sp.id + '\',' + i + ')">' +
-                    '<span class="song-title">' + esc(s.title) + '</span>' +
-                    '<span class="song-artist">' + esc(s.artist) + '</span>' +
+                    (s.logo
+                        ? '<img class="shared-song-logo" src="' + esc(s.logo) + '" draggable="false">'
+                        : '<div class="shared-song-logo-placeholder">></div>') +
+                    '<div class="shared-song-text">' +
+                        '<span class="song-title">' + esc(s.title) + '</span>' +
+                        '<span class="song-artist">' + esc(s.artist) + '</span>' +
+                    '</div>' +
                 '</div>').join('') +
             '</div>' +
             '<div id="' + commId + '" class="shared-comments">' +
