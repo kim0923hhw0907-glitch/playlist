@@ -167,17 +167,25 @@ async function loadUserData() {
 }
 
 async function saveUserData() {
+    let sbError = null;
     if (sbUser && sbConfigured) {
         try {
-            await sbSaveSongs(sbUser.id, songs);
-            await sbSavePlaylists(sbUser.id, playlists);
+            const r = await sbSaveSongs(sbUser.id, songs);
+            if (r && r.length > 0) sbError = r[0];
         } catch (e) {
-            console.warn('Supabase save failed, saving to localStorage', e);
+            sbError = e; console.warn('Supabase save failed, saving to localStorage', e);
         }
+        try {
+            const r = await sbSavePlaylists(sbUser.id, playlists);
+            if (r && r.length > 0) sbError = r[0];
+        } catch (e) {
+            sbError = e; console.warn('Supabase playlist save failed', e);
+        }
+        if (sbError) console.warn('Supabase save had errors but localStorage backup saved');
     }
-    // Always save to localStorage as backup
     localStorage.setItem(userKey('pl_songs2'), JSON.stringify(songs));
     localStorage.setItem(userKey('pl_playlists2'), JSON.stringify(playlists));
+    return sbError;
 }
 
 // YouTube playback
@@ -709,7 +717,7 @@ document.getElementById('song-url').addEventListener('input', function () {
 });
 
 // Add song
-document.getElementById('add-song-form').addEventListener('submit', e => {
+document.getElementById('add-song-form').addEventListener('submit', async e => {
     e.preventDefault();
     const title = document.getElementById('song-title').value.trim();
     const artist = document.getElementById('song-artist').value.trim();
@@ -717,7 +725,7 @@ document.getElementById('add-song-form').addEventListener('submit', e => {
     if (!title || !artist) return;
     if (url) {
         songs.push({ id: uid(), title, artist, url, fileId: null, isLocal: false });
-        save();
+        await save();
         renderLibrary();
         e.target.reset();
     }
@@ -888,7 +896,7 @@ async function addFileSong(file) {
         id: uid(), title, artist,
         url: url, filePath: filePath, isLocal: true
     });
-    save();
+    await save();
 }
 
 // Batch file metadata editing
@@ -1709,7 +1717,7 @@ function queueSharedSong(playlistId, songIndex) {
         // Build song data — upload files to server for cross-device playback
         const songData = [];
         for (const s of songsList) {
-            const entry = { title: s.title, artist: s.artist, url: s.url };
+            const entry = { title: s.title, artist: s.artist, url: s.url, isLocal: s.isLocal || false };
             if (s.logo) entry.logo = s.logo;
             if (s.lyrics) entry.lyrics = s.lyrics;
             if (s.isLocal) {
@@ -2374,7 +2382,7 @@ async function loadSong(index) {
         // Set crossOrigin for cross-origin audio sources (Supabase Storage)
         audio.crossOrigin = song.isLocal || song.fileId || song.fileRef ? null : 'anonymous';
 
-        if (song.isLocal && song.filePath) {
+        if ((song.isLocal || song.filePath) && song.filePath) {
             if (song.filePath.startsWith('idxdb:')) {
                 const fileData = await dbGet(song.filePath.slice(6));
                 if (fileData) {
@@ -2860,6 +2868,17 @@ async function registerUser(username, password) {
     if (username.length < 2) { document.getElementById('login-error').textContent = '사용자 이름은 2자 이상이어야 합니다'; return false; }
     if (password.length < 4) { document.getElementById('login-error').textContent = '비밀번호는 4자 이상이어야 합니다'; return false; }
 
+    // Check if username already exists
+    if (sbConfigured && _supabase) {
+        try {
+            const existing = await _supabase.from('profiles').select('username').eq('username', username).maybeSingle();
+            if (existing && existing.data) {
+                document.getElementById('login-error').textContent = '이미 사용 중인 사용자 이름입니다. 다른 이름을 선택하세요.';
+                return false;
+            }
+        } catch (_) {}
+    }
+
     // Try Supabase first (cross-device)
     let sbOk = false;
     if (sbConfigured && _supabase) {
@@ -2906,6 +2925,7 @@ async function loginUser(username, password) {
             }
         } catch (e) {
             console.warn('Supabase login failed: ' + e.message + '. Trying local fallback.', e);
+            document.getElementById('login-error').textContent = '서버 로그인 실패: ' + e.message + '. 로컬 계정으로 시도합니다.';
         }
     }
 
@@ -2918,7 +2938,10 @@ async function loginUser(username, password) {
     }
     const hasUserSpecificData = localStorage.getItem('pl_songs2_' + username) !== null;
     if (!match && !hasUserSpecificData) {
-        document.getElementById('login-error').textContent = '존재하지 않는 사용자입니다. 회원가입해 주세요';
+        const supabaseTried = sbConfigured && _supabase;
+        document.getElementById('login-error').textContent = supabaseTried
+            ? '해당 계정을 찾을 수 없습니다. 사용자 이름과 비밀번호를 확인하거나 회원가입해 주세요.'
+            : '존재하지 않는 사용자입니다. 회원가입해 주세요';
         return false;
     }
 

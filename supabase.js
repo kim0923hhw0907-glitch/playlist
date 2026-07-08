@@ -111,7 +111,7 @@ function songToDb(s, userId) {
 }
 
 async function sbSaveSongs(userId, songs) {
-    if (!_supabase) return;
+    if (!_supabase) return [];
     const existing = await sbLoadSongs(userId);
     const existingIds = new Set(existing.map(s => s.id));
     const toUpsert = songs.filter(s => s.id && existingIds.has(s.id));
@@ -131,6 +131,7 @@ async function sbSaveSongs(userId, songs) {
     const results = await Promise.all(ops);
     const errors = results.filter(r => r && r.error);
     if (errors.length > 0) console.warn('sbSaveSongs errors:', errors);
+    return errors;
 }
 
 // ─── Playlists ───
@@ -150,7 +151,7 @@ async function sbLoadPlaylists(userId) {
 }
 
 async function sbSavePlaylists(userId, playlists) {
-    if (!_supabase) return;
+    if (!_supabase) return [];
     const existing = await sbLoadPlaylists(userId);
     const existingIds = new Set(existing.map(p => p.id));
     const toUpsert = playlists.filter(p => p.id && existingIds.has(p.id));
@@ -170,6 +171,7 @@ async function sbSavePlaylists(userId, playlists) {
     const results = await Promise.all(ops);
     const errors = results.filter(r => r && r.error);
     if (errors.length > 0) console.warn('sbSavePlaylists errors:', errors);
+    return errors;
 }
 
 // ─── Shared Playlists ───
