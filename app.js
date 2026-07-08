@@ -536,6 +536,16 @@ async function save() {
     await saveUserData();
 }
 
+function doSave() {
+    const btn = document.getElementById('save-btn');
+    if (btn) { btn.textContent = '💾 저장 중...'; btn.disabled = true; }
+    save().then(() => {
+        if (btn) { btn.textContent = '✓ 저장됨'; setTimeout(() => { btn.textContent = '💾 저장'; btn.disabled = false; }, 1500); }
+    }).catch(() => {
+        if (btn) { btn.textContent = '❌ 저장 실패'; setTimeout(() => { btn.textContent = '💾 저장'; btn.disabled = false; }, 2000); }
+    });
+}
+
 function migrateSharedPlaylists() {
     let existing = [];
     try {
@@ -860,9 +870,11 @@ async function addFileSong(file) {
     const title = meta.title || file.name.replace(/\.[^.]+$/, '');
     const artist = meta.artist || '알 수 없음';
     let filePath = '';
+    let url = '';
     if (sbUser) {
         try {
             filePath = await sbUploadFile(sbUser.id, file);
+            url = await sbGetFileUrl(filePath);
         } catch (e) {
             console.warn('Supabase upload failed, using local fallback', e);
         }
@@ -874,7 +886,7 @@ async function addFileSong(file) {
     }
     songs.push({
         id: uid(), title, artist,
-        url: '', filePath: filePath, isLocal: true
+        url: url, filePath: filePath, isLocal: true
     });
     save();
 }
@@ -929,11 +941,13 @@ async function confirmBatchAdd() {
         const title = item.querySelector('.batch-title').value.trim() || entry.title;
         const artist = item.querySelector('.batch-artist').value.trim() || entry.artist;
         let filePath = '';
+        let url = '';
         if (sbUser) {
             try {
                 const blob = new Blob([entry.data], { type: entry.type || 'audio/mpeg' });
                 const fakeFile = new File([blob], entry.name, { type: entry.type || 'audio/mpeg' });
                 filePath = await sbUploadFile(sbUser.id, fakeFile);
+                url = await sbGetFileUrl(filePath);
             } catch (e) {
                 console.warn('Supabase upload failed', e);
             }
@@ -944,7 +958,7 @@ async function confirmBatchAdd() {
         }
         songs.push({
             id: uid(), title, artist,
-            url: '', filePath: filePath, isLocal: true
+            url: url, filePath: filePath, isLocal: true
         });
     }
     save();
@@ -1202,14 +1216,15 @@ document.getElementById('edit-form').addEventListener('submit', async e => {
             const blob = new Blob([pendingEditFile.data], { type: pendingEditFile.type || 'audio/mpeg' });
             const fakeFile = new File([blob], pendingEditFile.name, { type: pendingEditFile.type || 'audio/mpeg' });
             song.filePath = await sbUploadFile(sbUser.id, fakeFile);
+            song.url = await sbGetFileUrl(song.filePath);
         } else {
             const fid = (currentUser || 'anon') + '_' + uid();
             await dbPut(fid, pendingEditFile.data, pendingEditFile.name, pendingEditFile.type);
             song.filePath = 'idxdb:' + fid;
+            song.url = '';
         }
         song.fileId = null;
         song.isLocal = true;
-        song.url = '';
         pendingEditFile = null;
     }
 
@@ -2156,7 +2171,9 @@ async function applySharedPlaylist(id) {
             if (ss.filePath && !ss.filePath.startsWith('idxdb:')) {
                 newSong.filePath = ss.filePath;
                 newSong.isLocal = true;
-                newSong.url = '';
+                if (!newSong.url) {
+                    try { newSong.url = await sbGetFileUrl(ss.filePath); } catch (_) {}
+                }
             }
             const fileSrc = ss.fileData || ss.fileRef;
             if (fileSrc) {
@@ -2200,6 +2217,7 @@ async function applySharedPlaylist(id) {
     if (added.length === 0) { alert('모든 곡이 이미 라이브러리에 있습니다.'); return; }
 
     const pl = { id: uid(), name: sp.title + ' (공유)', songs: added.map(s => s.id) };
+    if (sp.logo) pl.logo = sp.logo;
     playlists.push(pl);
     save();
     renderLibrary();
@@ -2785,6 +2803,8 @@ async function showApp() {
         syncEl.textContent = sbUser ? '☁️' : '💻';
         syncEl.title = sbUser ? '서버 동기화 중 (Supabase)' : '로컬 전용 모드';
     }
+    const saveBtn = document.getElementById('save-btn');
+    if (saveBtn) saveBtn.style.display = sbUser ? 'inline-block' : 'none';
     let displayName = currentUser;
     try {
         const profile = currentUser ? await getMappedProfile(currentUser) : null;
@@ -2793,6 +2813,7 @@ async function showApp() {
     document.getElementById('user-display').textContent = displayName + '님';
     loadYouTubeAPI();
     applyUI();
+    if (sbUser) setInterval(() => save(), 30000);
     renderLibrary();
     renderPlaylists();
     renderPlayer();
