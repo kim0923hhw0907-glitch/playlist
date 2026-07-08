@@ -1495,7 +1495,10 @@ function searchPlaylistSongs(plId, input) {
     }
     resultsEl.innerHTML = matches.map(s =>
         '<div class="search-result-item" onclick="addSongToPlaylist(\'' + plId + '\',\'' + s.id + '\');this.parentElement.innerHTML=\'\';this.parentElement.previousElementSibling.value=\'\'">' +
-            esc(s.title) + ' - ' + esc(s.artist) +
+            (s.logo
+                ? '<img class="search-result-logo" src="' + esc(s.logo) + '" draggable="false">'
+                : '<div class="search-result-logo-placeholder">></div>') +
+            '<span class="search-result-text">' + esc(s.title) + ' - ' + esc(s.artist) + '</span>' +
         '</div>'
     ).join('');
 }
