@@ -2395,21 +2395,23 @@ async function loadSong(index) {
             }
         } else if (song.fileId || song.fileRef) {
             const key = song.fileId || song.fileRef;
-            const fileData = await dbGet(key);
-            if (fileData) {
-                const blob = new Blob([fileData.data], { type: fileData.type || 'audio/mpeg' });
-                currentBlobUrl = URL.createObjectURL(blob);
-                audio.src = currentBlobUrl;
-            } else if (song.url) {
+            if (song.url) {
                 audio.src = song.url;
                 audio.crossOrigin = 'anonymous';
             } else {
-                const localMatch = song.originalId ? songs.find(s => s.id === song.originalId) : null;
-                if (localMatch) {
-                    audio.src = localMatch.url || '';
-                    audio.crossOrigin = localMatch.isLocal ? null : 'anonymous';
+                const fileData = await dbGet(key);
+                if (fileData) {
+                    const blob = new Blob([fileData.data], { type: fileData.type || 'audio/mpeg' });
+                    currentBlobUrl = URL.createObjectURL(blob);
+                    audio.src = currentBlobUrl;
                 } else {
-                    throw new Error('이 파일은 다른 기기에서 공유된 로컬 파일입니다');
+                    const localMatch = song.originalId ? songs.find(s => s.id === song.originalId) : null;
+                    if (localMatch) {
+                        audio.src = localMatch.url || '';
+                        audio.crossOrigin = localMatch.isLocal ? null : 'anonymous';
+                    } else {
+                        throw new Error('이 파일은 다른 기기에서 공유된 로컬 파일입니다');
+                    }
                 }
             }
         } else {
